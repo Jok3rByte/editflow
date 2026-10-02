@@ -42,10 +42,14 @@ export default async function DashboardPage() {
   const activePeriod = await resolveActivePeriod(organization.id);
   const supabase = await createClient();
 
-  const [{ data: kpis }, { data: proximosEventos }, { data: videosAtrasados }] = await Promise.all([
+  const [
+    { data: kpis, error: kpisError },
+    { data: proximosEventos, error: proximosEventosError },
+    { data: videosAtrasados, error: videosAtrasadosError },
+  ] = await Promise.all([
     activePeriod
       ? supabase.from("v_period_kpis").select("*").eq("period_id", activePeriod.id).maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     activePeriod
       ? supabase
           .from("calendar_events")
@@ -54,7 +58,7 @@ export default async function DashboardPage() {
           .gte("start_at", new Date().toISOString())
           .order("start_at", { ascending: true })
           .limit(5)
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     activePeriod
       ? supabase
           .from("videos")
@@ -64,8 +68,18 @@ export default async function DashboardPage() {
           .not("status", "in", "(aprobado,entregado,cancelado)")
           .order("due_date", { ascending: true })
           .limit(6)
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
+
+  // Un fallo de consulta (ej. desfase de esquema) dejaría el dashboard en
+  // ceros sin pista — lo registramos en el log del servidor.
+  for (const [label, error] of [
+    ["v_period_kpis", kpisError],
+    ["calendar_events", proximosEventosError],
+    ["videos", videosAtrasadosError],
+  ] as const) {
+    if (error) console.error(`[dashboard] fallo al consultar ${label}:`, error.message);
+  }
 
   return (
     <div className="space-y-6">
