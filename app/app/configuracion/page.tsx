@@ -11,6 +11,7 @@ export default async function ConfiguracionPage({
 }) {
   const { google_error: googleError } = await searchParams;
   const org = await requireActiveOrganization();
+  const puedeGestionar = org.role === "owner" || org.role === "admin";
   const supabase = await createClient();
   const { data: googleConnection } = await supabase
     .from("google_oauth_tokens")
@@ -28,7 +29,17 @@ export default async function ConfiguracionPage({
           propietario recibe todos los eventos; cada invitado solo recibe el que le asignaron.
         </p>
 
-        {googleError === "email_mismatch" && (
+        {!puedeGestionar && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Solo el propietario o un administrador puede gestionar las integraciones y la
+              configuración de la organización.
+            </p>
+          </div>
+        )}
+
+        {puedeGestionar && googleError === "email_mismatch" && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 p-3 text-xs text-danger">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <p>
@@ -39,14 +50,16 @@ export default async function ConfiguracionPage({
           </div>
         )}
 
-        <div className="mt-4">
-          <GoogleCalendarConnection
-            connected={Boolean(googleConnection)}
-            googleEmail={googleConnection?.google_email}
-            accountEmail={org.ownerEmail}
-          />
-        </div>
-        {googleConnection && (
+        {puedeGestionar && (
+          <div className="mt-4">
+            <GoogleCalendarConnection
+              connected={Boolean(googleConnection)}
+              googleEmail={googleConnection?.google_email}
+              accountEmail={org.ownerEmail}
+            />
+          </div>
+        )}
+        {puedeGestionar && googleConnection && (
           <p className="mt-3 text-xs text-muted-foreground">
             También funciona al revés: un evento creado directo en Google Calendar (o por Siri) se
             importa acá solo si el título o la descripción tiene la palabra{" "}

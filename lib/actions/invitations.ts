@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireActiveOrganization } from "@/lib/period/resolve";
 import { appUrl } from "@/lib/supabase/env";
 import type { InvitationStatus, MemberRole } from "@/types/database.types";
 
@@ -93,6 +94,11 @@ export async function createInvitation(
   email: string,
   role: MemberRole,
 ): Promise<CreateInvitationResult> {
+  const org = await requireActiveOrganization();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { ok: false, error: "Solo el propietario o un administrador puede invitar miembros." };
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("invitations")
@@ -109,6 +115,11 @@ export async function createInvitation(
 }
 
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
+  const org = await requireActiveOrganization();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { ok: false, error: "Solo el propietario o un administrador puede revocar invitaciones." };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("invitations")
