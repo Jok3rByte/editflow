@@ -129,30 +129,36 @@ export async function createInvitation(
   // invitación ya quedó y el link se devuelve para compartir a mano.
   let emailSent = false;
   try {
-    const [{ data: owner }, { data: googleConnection }] = await Promise.all([
-      supabase
-        .from("memberships")
-        .select("email, full_name")
-        .eq("organization_id", organizationId)
-        .eq("role", "owner")
-        .eq("active", true)
-        .maybeSingle(),
-      supabase.from("google_oauth_tokens").select("scope").eq("organization_id", organizationId).maybeSingle(),
-    ]);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: inviter } = await supabase
+      .from("memberships")
+      .select("id, email, full_name")
+      .eq("organization_id", organizationId)
+      .eq("active", true)
+      .eq("user_id", user?.id ?? "")
+      .maybeSingle();
 
-    const inviterName = owner?.full_name || owner?.email || org.name;
-    const inviterEmail = owner?.email || org.ownerEmail;
-    const result = await sendInvitationEmail({
-      to: invitedEmail,
-      organizationId,
-      inviterEmail,
-      gmailSendAvailable: Boolean(googleConnection?.scope?.includes(GMAIL_SEND_SCOPE)),
-      organizationName: org.name,
-      inviterName,
-      roleLabel: ROL_LABEL[role],
-      inviteUrl: link,
-    });
-    emailSent = result.sent;
+    if (inviter) {
+      const { data: conn } = await supabase
+        .from("google_oauth_tokens")
+        .select("scope")
+        .eq("membership_id", inviter.id)
+        .maybeSingle();
+
+      const result = await sendInvitationEmail({
+        to: invitedEmail,
+        senderMembershipId: inviter.id,
+        inviterEmail: inviter.email,
+        gmailSendAvailable: Boolean(conn?.scope?.includes(GMAIL_SEND_SCOPE)),
+        organizationName: org.name,
+        inviterName: inviter.full_name || inviter.email,
+        roleLabel: ROL_LABEL[role],
+        inviteUrl: link,
+      });
+      emailSent = result.sent;
+    }
   } catch (err) {
     console.error("[createInvitation] no se pudo enviar el correo de invitación", err);
   }

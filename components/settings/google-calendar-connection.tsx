@@ -18,8 +18,8 @@ export function GoogleCalendarConnection({
 }: {
   connected: boolean;
   googleEmail?: string;
-  /** El correo con el que el propietario se registró — Google debe
-   *  conectarse con esta MISMA cuenta, nunca con otra. */
+  /** El correo con el que el usuario ingresa a EditFlow — Google debe
+   *  conectarse con esta MISMA cuenta (la propia), nunca con otra. */
   accountEmail: string;
 }) {
   const [connecting, setConnecting] = useState(false);
@@ -75,8 +75,8 @@ export function GoogleCalendarConnection({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Se conecta con <span className="font-medium text-foreground">{accountEmail}</span> — el
-                mismo correo con el que te registraste.
+                Se conecta con <span className="font-medium text-foreground">{accountEmail}</span> — tu
+                propio correo, el mismo con el que ingresas a EditFlow.
               </p>
             )}
           </div>
@@ -100,8 +100,8 @@ export function GoogleCalendarConnection({
       {!connected && (
         <p className="text-xs text-muted-foreground">
           En la pantalla de Google, elige exactamente{" "}
-          <span className="font-medium text-foreground">{accountEmail}</span> — con otra cuenta la
-          conexión se rechaza automáticamente.
+          <span className="font-medium text-foreground">{accountEmail}</span> — tu propia cuenta. Con
+          otra la conexión se rechaza automáticamente.
         </p>
       )}
     </div>

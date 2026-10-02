@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 
+// Cada quien desconecta ÚNICAMENTE su propia conexión. No hay chequeo de rol
+// porque es una integración personal (de su perfil); la policy RLS limita el
+// delete a la fila del propio usuario.
 export async function disconnectGoogleCalendar() {
   const org = await requireActiveOrganization();
-  if (org.role !== "owner" && org.role !== "admin") {
-    throw new Error("Solo el propietario o un administrador puede desconectar Google Calendar.");
-  }
 
   const supabase = await createClient();
   const { error } = await supabase

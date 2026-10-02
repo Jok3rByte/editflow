@@ -57,10 +57,11 @@ export async function GET(request: NextRequest) {
  * provider_refresh_token porque se pidió con access_type=offline y
  * prompt=consent.
  *
- * Regla dura: la cuenta de Google conectada tiene que ser EXACTAMENTE la
- * misma con la que el propietario se registró (organizations.owner_email).
- * Si eligió otra cuenta en la pantalla de Google, se desvincula de una y no
- * se guarda ningún token.
+ * Regla dura: cada quien conecta SU PROPIA cuenta de Google — la misma con
+ * la que ingresa a EditFlow (session.user.email). Si eligió otra cuenta en
+ * la pantalla de Google, se desvincula y no se guarda ningún token. El token
+ * se guarda por miembro (membership), para que cada persona reciba los
+ * eventos en su propio calendario.
  */
 async function saveGoogleCalendarConnection(
   session: Session | null,
@@ -69,22 +70,21 @@ async function saveGoogleCalendarConnection(
 
   const googleIdentity = session.user.identities?.find((i) => i.provider === "google");
   const googleEmail = (googleIdentity?.identity_data?.email as string | undefined) ?? session.user.email;
-  if (!googleEmail) return "skipped";
+  const loginEmail = session.user.email;
+  if (!googleEmail || !loginEmail) return "skipped";
 
   const supabase = await createClient();
   const { data: membership } = await supabase
     .from("memberships")
-    .select("organization_id, role, organizations(owner_email)")
+    .select("id, organization_id")
     .eq("active", true)
-    .in("role", ["owner", "admin"])
+    .eq("user_id", session.user.id)
     .limit(1)
     .maybeSingle();
 
   if (!membership) return "skipped";
 
-  const ownerEmail = (membership.organizations as unknown as { owner_email: string } | null)?.owner_email;
-
-  if (!ownerEmail || ownerEmail.toLowerCase() !== googleEmail.toLowerCase()) {
+  if (loginEmail.toLowerCase() !== googleEmail.toLowerCase()) {
     if (googleIdentity) {
       await supabase.auth.unlinkIdentity(googleIdentity);
     }
@@ -100,6 +100,7 @@ async function saveGoogleCalendarConnection(
 
   await supabase.from("google_oauth_tokens").upsert(
     {
+      membership_id: membership.id,
       organization_id: membership.organization_id,
       google_email: googleEmail,
       access_token: session.provider_token,
@@ -107,7 +108,7 @@ async function saveGoogleCalendarConnection(
       expires_at: expiresAt,
       scope: `${CALENDAR_SCOPE} ${GMAIL_SEND_SCOPE}`,
     },
-    { onConflict: "organization_id" },
+    { onConflict: "membership_id" },
   );
 
   return "saved";

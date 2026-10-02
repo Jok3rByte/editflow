@@ -16,9 +16,10 @@ function buildFromHeader(inviterName: string): string {
 
 export interface SendInvitationInput extends InvitationEmailProps {
   to: string;
-  organizationId: string;
+  /** Membership de quien invita — su token de Gmail es el que se usa. */
+  senderMembershipId: string;
   inviterEmail: string;
-  /** true si la organización conectó Google con el scope gmail.send. */
+  /** true si quien invita conectó Google con el scope gmail.send. */
   gmailSendAvailable: boolean;
 }
 
@@ -34,12 +35,12 @@ export type SendInvitationResult =
  * el enlace a mano.
  */
 export async function sendInvitationEmail(input: SendInvitationInput): Promise<SendInvitationResult> {
-  const { to, organizationId, inviterEmail, gmailSendAvailable, ...templateProps } = input;
+  const { to, senderMembershipId, inviterEmail, gmailSendAvailable, ...templateProps } = input;
   const subject = `EditFlow · ${templateProps.inviterName} te invita a ${templateProps.organizationName}`;
   const html = await render(InvitationEmail(templateProps));
 
   if (gmailSendAvailable) {
-    const sent = await sendGmailMessage(organizationId, {
+    const sent = await sendGmailMessage(senderMembershipId, {
       fromName: templateProps.inviterName,
       fromEmail: inviterEmail,
       to,

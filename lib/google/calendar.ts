@@ -38,17 +38,19 @@ async function refreshAccessToken(refreshToken: string): Promise<GoogleTokenResp
 }
 
 /**
- * Devuelve un access_token válido para la organización, renovándolo si ya
- * expiró. Devuelve null si la organización no tiene Google Calendar
- * conectado — quien llama decide si eso bloquea la acción o solo se salta
- * el paso de Google (los correos por Resend siguen funcionando igual).
+ * Devuelve un access_token válido para la conexión de Google de un MIEMBRO,
+ * renovándolo si ya expiró. Devuelve null si ese miembro no conectó su
+ * Google — quien llama decide si eso bloquea la acción o solo se salta el
+ * paso de Google. Usa service role a propósito: al crear un evento, el
+ * owner/admin necesita leer el token de OTRO miembro (el asignado) para
+ * escribir en el calendario de esa persona.
  */
-export async function getValidAccessToken(organizationId: string): Promise<string | null> {
+export async function getValidAccessToken(membershipId: string): Promise<string | null> {
   const supabase = createServiceRoleClient();
   const { data: tokenRow } = await supabase
     .from("google_oauth_tokens")
     .select("access_token, refresh_token, expires_at")
-    .eq("organization_id", organizationId)
+    .eq("membership_id", membershipId)
     .maybeSingle();
 
   if (!tokenRow) return null;
@@ -70,7 +72,7 @@ export async function getValidAccessToken(organizationId: string): Promise<strin
       access_token: refreshed.access_token,
       expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
     })
-    .eq("organization_id", organizationId);
+    .eq("membership_id", membershipId);
 
   return refreshed.access_token;
 }
@@ -81,7 +83,6 @@ export interface GoogleCalendarEventInput {
   startAt: string; // ISO
   endAt: string; // ISO
   timeZone: string;
-  attendeeEmails: string[];
 }
 
 export interface GoogleCalendarEventResult {
@@ -90,19 +91,19 @@ export interface GoogleCalendarEventResult {
 }
 
 /**
- * Crea el evento en el Google Calendar del propietario (la cuenta
- * conectada para la organización) con los asistentes indicados. Con
- * sendUpdates=all, Google Calendar le manda la invitación por correo a
- * cada asistente automáticamente — no hace falta reimplementar eso.
+ * Crea el evento en el Google Calendar PROPIO del miembro indicado (su
+ * calendario primario), usando su propio token. No se agregan asistentes:
+ * cada persona tiene su propia copia en su propio calendario, así que no se
+ * manda ninguna invitación cruzada.
  */
 export async function createGoogleCalendarEvent(
-  organizationId: string,
+  membershipId: string,
   event: GoogleCalendarEventInput,
 ): Promise<GoogleCalendarEventResult | null> {
-  const accessToken = await getValidAccessToken(organizationId);
+  const accessToken = await getValidAccessToken(membershipId);
   if (!accessToken) return null;
 
-  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}?sendUpdates=all`, {
+  const res = await fetch(GOOGLE_CALENDAR_EVENTS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -113,7 +114,6 @@ export async function createGoogleCalendarEvent(
       description: event.description,
       start: { dateTime: event.startAt, timeZone: event.timeZone },
       end: { dateTime: event.endAt, timeZone: event.timeZone },
-      attendees: event.attendeeEmails.map((email) => ({ email })),
     }),
   });
 
@@ -126,52 +126,15 @@ export async function createGoogleCalendarEvent(
   return { googleEventId: data.id, htmlLink: data.htmlLink };
 }
 
-/**
- * Actualiza un evento ya creado en el Google Calendar del propietario.
- * Silencioso si no hay conexión o si la API falla (el evento en EditFlow ya
- * quedó guardado; Google es un espejo, no la fuente de verdad).
- */
-export async function updateGoogleCalendarEvent(
-  organizationId: string,
-  googleEventId: string,
-  event: GoogleCalendarEventInput,
-): Promise<GoogleCalendarEventResult | null> {
-  const accessToken = await getValidAccessToken(organizationId);
-  if (!accessToken) return null;
-
-  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}/${googleEventId}?sendUpdates=all`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      summary: event.title,
-      description: event.description,
-      start: { dateTime: event.startAt, timeZone: event.timeZone },
-      end: { dateTime: event.endAt, timeZone: event.timeZone },
-      attendees: event.attendeeEmails.map((email) => ({ email })),
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("Google Calendar update error", res.status, await res.text());
-    return null;
-  }
-
-  const data = await res.json();
-  return { googleEventId: data.id, htmlLink: data.htmlLink };
-}
-
-/** Borra el espejo en Google Calendar. Silencioso si no hay conexión. */
+/** Borra el espejo en el Google Calendar propio del miembro. Silencioso si no hay conexión. */
 export async function deleteGoogleCalendarEvent(
-  organizationId: string,
+  membershipId: string,
   googleEventId: string,
 ): Promise<void> {
-  const accessToken = await getValidAccessToken(organizationId);
+  const accessToken = await getValidAccessToken(membershipId);
   if (!accessToken) return;
 
-  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}/${googleEventId}?sendUpdates=all`, {
+  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}/${googleEventId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -207,10 +170,10 @@ export interface ListEventsResult {
  * importar años de eventos viejos.
  */
 export async function listCalendarEvents(
-  organizationId: string,
+  membershipId: string,
   { syncToken, timeMinIso }: { syncToken?: string | null; timeMinIso: string },
 ): Promise<ListEventsResult | null> {
-  const accessToken = await getValidAccessToken(organizationId);
+  const accessToken = await getValidAccessToken(membershipId);
   if (!accessToken) return null;
 
   const events: GoogleRawEvent[] = [];

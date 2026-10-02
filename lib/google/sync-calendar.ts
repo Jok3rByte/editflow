@@ -37,6 +37,7 @@ function eventDateTime(part: { dateTime?: string; date?: string } | undefined): 
 }
 
 export interface SyncResult {
+  membershipId: string;
   organizationId: string;
   imported: number;
   removed: number;
@@ -45,38 +46,47 @@ export interface SyncResult {
 }
 
 /**
- * Trae los cambios del Google Calendar conectado a esta organización y
- * refleja en calendar_events solo los que tienen la palabra clave "Flow".
- * Se llama desde el cron (todas las organizaciones) — nunca desde una
- * request de usuario, por eso usa el service role client directo.
+ * Trae los cambios del Google Calendar PROPIO de un miembro y refleja en
+ * calendar_events solo los que tienen la palabra clave "Flow". Se llama
+ * desde el cron (todas las conexiones) — nunca desde una request de usuario,
+ * por eso usa el service role client directo.
  */
-export async function syncOrganizationCalendar(organizationId: string): Promise<SyncResult> {
+export async function syncMembershipCalendar(membershipId: string): Promise<SyncResult> {
   const supabase = createServiceRoleClient();
-  const result: SyncResult = { organizationId, imported: 0, removed: 0, skipped: 0 };
+  const result: SyncResult = { membershipId, organizationId: "", imported: 0, removed: 0, skipped: 0 };
+
+  const { data: tokenRow } = await supabase
+    .from("google_oauth_tokens")
+    .select("organization_id, calendar_sync_token")
+    .eq("membership_id", membershipId)
+    .maybeSingle();
+
+  if (!tokenRow) {
+    result.error = "Sin conexión de Google Calendar para este miembro.";
+    return result;
+  }
+
+  const organizationId = tokenRow.organization_id;
+  result.organizationId = organizationId;
 
   const { data: org } = await supabase
     .from("organizations")
     .select("timezone")
     .eq("id", organizationId)
     .single();
-  const { data: tokenRow } = await supabase
-    .from("google_oauth_tokens")
-    .select("calendar_sync_token")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
 
-  if (!org || !tokenRow) {
-    result.error = "Sin organización u conexión de Google Calendar.";
+  if (!org) {
+    result.error = "Sin organización.";
     return result;
   }
 
-  let listResult = await listCalendarEvents(organizationId, {
+  let listResult = await listCalendarEvents(membershipId, {
     syncToken: tokenRow.calendar_sync_token,
     timeMinIso: new Date().toISOString(),
   });
 
   if (listResult?.needsFullResync) {
-    listResult = await listCalendarEvents(organizationId, {
+    listResult = await listCalendarEvents(membershipId, {
       syncToken: null,
       timeMinIso: new Date().toISOString(),
     });
@@ -167,18 +177,18 @@ export async function syncOrganizationCalendar(organizationId: string): Promise<
   await supabase
     .from("google_oauth_tokens")
     .update({ calendar_sync_token: listResult.nextSyncToken })
-    .eq("organization_id", organizationId);
+    .eq("membership_id", membershipId);
 
   return result;
 }
 
-export async function syncAllOrganizations(): Promise<SyncResult[]> {
+export async function syncAllConnections(): Promise<SyncResult[]> {
   const supabase = createServiceRoleClient();
-  const { data: conexiones } = await supabase.from("google_oauth_tokens").select("organization_id");
+  const { data: conexiones } = await supabase.from("google_oauth_tokens").select("membership_id");
 
   const resultados: SyncResult[] = [];
   for (const conexion of conexiones ?? []) {
-    resultados.push(await syncOrganizationCalendar(conexion.organization_id));
+    resultados.push(await syncMembershipCalendar(conexion.membership_id));
   }
   return resultados;
 }

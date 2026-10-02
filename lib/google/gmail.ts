@@ -24,18 +24,18 @@ interface SendGmailInput {
 }
 
 /**
- * Manda el correo con la API de Gmail usando el token del propietario: sale
- * literalmente de SU bandeja de envío (queda en su carpeta de Enviados, con
- * su nombre y su correo real como remitente) — no de un dominio de
- * terceros. Requiere que la conexión de Google se haya hecho con el scope
- * gmail.send (ver GoogleCalendarConnection); si no, quien llama debe caer
- * a un respaldo (Resend).
+ * Manda el correo con la API de Gmail usando el token del miembro remitente
+ * (normalmente el owner/admin que ejecuta la acción): sale literalmente de
+ * SU bandeja de envío (queda en su carpeta de Enviados, con su nombre y su
+ * correo real como remitente) — no de un dominio de terceros. Requiere que
+ * ese miembro haya conectado Google con el scope gmail.send; si no, quien
+ * llama debe caer a un respaldo (Resend).
  */
 export async function sendGmailMessage(
-  organizationId: string,
+  senderMembershipId: string,
   input: SendGmailInput,
 ): Promise<boolean> {
-  const accessToken = await getValidAccessToken(organizationId);
+  const accessToken = await getValidAccessToken(senderMembershipId);
   if (!accessToken) return false;
 
   const mime = [

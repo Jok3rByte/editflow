@@ -273,6 +273,8 @@ export interface Database {
           email: string;
           notify: boolean;
           response: string | null;
+          google_event_id: string | null;
+          google_html_link: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["event_attendees"]["Row"]> & {
           event_id: string;
@@ -298,6 +300,7 @@ export interface Database {
         Row: {
           id: string;
           organization_id: string;
+          membership_id: string;
           google_email: string;
           access_token: string;
           refresh_token: string | null;
@@ -309,6 +312,7 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["google_oauth_tokens"]["Row"]> & {
           organization_id: string;
+          membership_id: string;
           google_email: string;
           access_token: string;
           expires_at: string;
