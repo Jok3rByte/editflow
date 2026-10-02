@@ -16,7 +16,7 @@ export default async function MonitoreoPage() {
       ? supabase
           .from("videos")
           .select(
-            "id, seq, title, client_id, editor_id, start_date, due_date, status, priority, progreso, progreso_inicio, clients(name)",
+            "id, seq, title, client_id, editor_id, start_date, due_date, status, priority, progreso, progreso_inicio, processed_link, clients(name)",
           )
           .eq("period_id", activePeriod.id)
           .order("seq", { ascending: true })

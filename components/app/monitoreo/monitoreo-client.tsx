@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Link2, ExternalLink, Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +58,7 @@ interface VideoRow {
   priority: VideoPriority;
   progreso: number;
   progreso_inicio: string | null;
+  processed_link: string | null;
   clients: { name: string } | null;
 }
 
@@ -211,6 +212,128 @@ function ProgresoCell({
   );
 }
 
+// Link del video final (archivo entregado): se pega acá cuando la edición
+// está lista. Cualquiera que pueda editar (owner/admin/editor) lo puede
+// cargar; un viewer solo lo ve/copia. La columna la toca el editor también,
+// porque el trigger enforce_editor_video_columns lo permite.
+function LinkCell({
+  video,
+  onSave,
+  disabled,
+}: {
+  video: VideoRow;
+  onSave: (link: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [valor, setValor] = useState(video.processed_link ?? "");
+  const [copiado, setCopiado] = useState(false);
+  const tieneLink = Boolean(video.processed_link);
+
+  async function copiar() {
+    if (!video.processed_link) return;
+    try {
+      await navigator.clipboard.writeText(video.processed_link);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      toast.error("No se pudo copiar el link");
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {tieneLink && (
+        <>
+          <a
+            href={video.processed_link ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir link del video final"
+            className="flex size-6 items-center justify-center rounded-md text-primary transition-colors hover:bg-muted/50"
+          >
+            <ExternalLink className="size-3.5" />
+          </a>
+          <button
+            type="button"
+            onClick={copiar}
+            title="Copiar link"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          >
+            {copiado ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+          </button>
+        </>
+      )}
+
+      {disabled ? (
+        !tieneLink && <span className="pl-1 text-xs text-muted-foreground">—</span>
+      ) : (
+        <Popover
+          open={open}
+          onOpenChange={(o) => {
+            if (o) setValor(video.processed_link ?? "");
+            setOpen(o);
+          }}
+        >
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              title={tieneLink ? "Editar link" : "Agregar link del video final"}
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            >
+              <Link2 className="size-3.5" />
+              {!tieneLink && <span>Link</span>}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80" align="end">
+            <div className="space-y-3">
+              <Label className="text-xs">Link del video final</Label>
+              <Input
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder="https://..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onSave(valor.trim());
+                    setOpen(false);
+                  }
+                }}
+              />
+              <div className="flex justify-end gap-2">
+                {tieneLink && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      onSave("");
+                      setOpen(false);
+                    }}
+                  >
+                    Quitar
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    onSave(valor.trim());
+                    setOpen(false);
+                  }}
+                >
+                  Guardar
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miembros, role }: MonitoreoClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -300,6 +423,14 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
     });
   }
 
+  function handleCambiarLink(video: VideoRow, link: string) {
+    startTransition(async () => {
+      const result = await updateVideo({ id: video.id, processedLink: link || null });
+      if (result.ok) router.refresh();
+      else toast.error(result.error);
+    });
+  }
+
   function handleEliminar() {
     if (!videoAEliminar) return;
     startTransition(async () => {
@@ -314,7 +445,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
     });
   }
 
-  const colSpan = puedeCrearEliminar ? 9 : 8;
+  const colSpan = puedeCrearEliminar ? 10 : 9;
 
   return (
     <div className="space-y-6">
@@ -353,6 +484,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                 <th className="px-3 py-2.5">Avance</th>
                 <th className="px-3 py-2.5">Inicio</th>
                 <th className="px-3 py-2.5">Entrega</th>
+                <th className="px-3 py-2.5">Link</th>
                 {puedeCrearEliminar && <th className="w-10 px-3 py-2.5" />}
               </tr>
             </thead>
@@ -450,6 +582,13 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                       ) : (
                         <span className="text-xs text-muted-foreground">{formatDateEs(video.due_date)}</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <LinkCell
+                        video={video}
+                        onSave={(link) => handleCambiarLink(video, link)}
+                        disabled={!puedeEditar || isPending}
+                      />
                     </td>
                     {puedeCrearEliminar && (
                       <td className="px-3 py-2">
