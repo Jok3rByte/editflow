@@ -5,7 +5,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 import { appUrl } from "@/lib/supabase/env";
+import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
+import { sendInvitationEmail } from "@/lib/email/send-invitation";
 import type { InvitationStatus, MemberRole } from "@/types/database.types";
+
+const ROL_LABEL: Record<MemberRole, string> = {
+  owner: "Propietario",
+  admin: "Administrador",
+  editor: "Editor",
+  viewer: "Estratega (solo lectura)",
+};
 
 export interface InvitationDetails {
   organizationName: string;
@@ -81,13 +90,16 @@ export async function acceptInvitation(token: string): Promise<ActionResult> {
   redirect("/app/dashboard");
 }
 
-export type CreateInvitationResult = { ok: true; link: string } | { ok: false; error: string };
+export type CreateInvitationResult =
+  | { ok: true; link: string; emailSent: boolean }
+  | { ok: false; error: string };
 
 /**
- * Crea la invitación en la base y devuelve el link para compartir a mano
- * (/invitacion/[token]). Todavía no hay envío de correo automático (falta
- * configurar RESEND_API_KEY) — el propietario/admin copia y manda el link
- * por donde prefiera mientras tanto.
+ * Crea la invitación y, si hay transporte de correo, le manda al invitado un
+ * correo de EditFlow con el mismo enlace de ingreso (/invitacion/[token]).
+ * El correo sale directo desde el Gmail del propietario si conectó ese scope
+ * (máxima entregabilidad) y cae a Resend si no. Siempre se devuelve el link
+ * igual, para compartir a mano si el envío no estaba disponible.
  */
 export async function createInvitation(
   organizationId: string,
@@ -100,9 +112,10 @@ export async function createInvitation(
   }
 
   const supabase = await createClient();
+  const invitedEmail = email.trim().toLowerCase();
   const { data, error } = await supabase
     .from("invitations")
-    .insert({ organization_id: organizationId, email: email.trim().toLowerCase(), role })
+    .insert({ organization_id: organizationId, email: invitedEmail, role })
     .select("token")
     .single();
 
@@ -110,8 +123,42 @@ export async function createInvitation(
     return { ok: false, error: error?.message ?? "No se pudo crear la invitación." };
   }
 
+  const link = `${appUrl()}/invitacion/${data.token}`;
+
+  // El envío nunca debe tumbar la creación: si falla o no hay transporte, la
+  // invitación ya quedó y el link se devuelve para compartir a mano.
+  let emailSent = false;
+  try {
+    const [{ data: owner }, { data: googleConnection }] = await Promise.all([
+      supabase
+        .from("memberships")
+        .select("email, full_name")
+        .eq("organization_id", organizationId)
+        .eq("role", "owner")
+        .eq("active", true)
+        .maybeSingle(),
+      supabase.from("google_oauth_tokens").select("scope").eq("organization_id", organizationId).maybeSingle(),
+    ]);
+
+    const inviterName = owner?.full_name || owner?.email || org.name;
+    const inviterEmail = owner?.email || org.ownerEmail;
+    const result = await sendInvitationEmail({
+      to: invitedEmail,
+      organizationId,
+      inviterEmail,
+      gmailSendAvailable: Boolean(googleConnection?.scope?.includes(GMAIL_SEND_SCOPE)),
+      organizationName: org.name,
+      inviterName,
+      roleLabel: ROL_LABEL[role],
+      inviteUrl: link,
+    });
+    emailSent = result.sent;
+  } catch (err) {
+    console.error("[createInvitation] no se pudo enviar el correo de invitación", err);
+  }
+
   revalidatePath("/app/equipo");
-  return { ok: true, link: `${appUrl()}/invitacion/${data.token}` };
+  return { ok: true, link, emailSent };
 }
 
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {

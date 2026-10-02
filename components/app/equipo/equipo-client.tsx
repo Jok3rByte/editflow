@@ -111,10 +111,18 @@ export function EquipoClient({
     startTransition(async () => {
       const result = await createInvitation(organizationId, inviteEmail, inviteRole);
       if (result.ok) {
+        const correo = inviteEmail.trim();
         setInvitarOpen(false);
         setInviteEmail("");
         router.refresh();
-        copyToClipboard(result.link, "Invitación creada — el link ya está copiado, compártelo con la persona.");
+        if (result.emailSent) {
+          toast.success(`Invitación enviada por correo a ${correo}.`);
+        } else {
+          copyToClipboard(
+            result.link,
+            "Invitación creada — el link ya está copiado, compártelo con la persona.",
+          );
+        }
       } else {
         toast.error(result.error);
       }
