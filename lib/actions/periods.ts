@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { ACTIVE_PERIOD_COOKIE } from "@/lib/period/resolve";
+import { monthLabelEs } from "@/lib/utils/dates";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 export type OpenPeriodResult = { ok: true; periodId: string } | { ok: false; error: string };
@@ -39,6 +40,12 @@ export async function openPeriod(input: OpenPeriodInput): Promise<OpenPeriodResu
   if (error || !periodId) {
     return { ok: false, error: error?.message ?? "No se pudo abrir el mes." };
   }
+
+  // open_period() en la base genera el label con to_char(...,'TMMonth'), que
+  // depende del locale del servidor Postgres (en_US por defecto en Supabase)
+  // y sale en inglés — se sobreescribe acá con el nombre de mes en español.
+  const label = `${monthLabelEs(input.month).toUpperCase()} ${input.year}`;
+  await supabase.from("periods").update({ label }).eq("id", periodId);
 
   await setActivePeriod(periodId);
   revalidatePath("/app", "layout");

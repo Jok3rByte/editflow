@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { slugify, withRandomSuffix } from "@/lib/utils/slug";
+import { monthLabelEs } from "@/lib/utils/dates";
 import { CREATE_ORGANIZATION_SCHEMA } from "@/lib/validations/organization";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -40,6 +41,22 @@ export async function createOrganization(formData: FormData): Promise<ActionResu
 
   if (error || !organizationId) {
     return { ok: false, error: error?.message ?? "No se pudo crear el espacio." };
+  }
+
+  // create_organization_with_owner() abre el mes en curso llamando a
+  // open_period() en la base, cuyo label sale en inglés (depende del
+  // locale del servidor Postgres) — se corrige acá al español.
+  const { data: periodoAbierto } = await supabase
+    .from("periods")
+    .select("id, year, month")
+    .eq("organization_id", organizationId)
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (periodoAbierto) {
+    const label = `${monthLabelEs(periodoAbierto.month).toUpperCase()} ${periodoAbierto.year}`;
+    await supabase.from("periods").update({ label }).eq("id", periodoAbierto.id);
   }
 
   redirect("/app/dashboard");
