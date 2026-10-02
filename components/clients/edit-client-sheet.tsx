@@ -160,9 +160,8 @@ export function EditClientSheet({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar a {client?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esto borra la ficha del cliente para siempre. Solo se puede hacer si nunca
-              tuvo videos registrados — si ya tiene historial, se bloquea en vez de
-              perderlo.
+              Esto borra la ficha del cliente y TODOS sus videos de TODOS los meses,
+              incluidos los ya cerrados. No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

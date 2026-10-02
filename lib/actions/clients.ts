@@ -146,11 +146,10 @@ export async function updateClient(clientId: string, formData: FormData): Promis
 }
 
 /**
- * Borra la ficha del cliente para siempre — solo si nunca tuvo videos
- * registrados (en ningún mes, abierto o cerrado). Si ya tiene videos, se
- * bloquea: borrarlo destruiría ese histórico porque videos.client_id tiene
- * on delete cascade. client_periods se borra solo (mismo cascade) si el
- * borrado procede.
+ * Borra la ficha del cliente para siempre, junto con TODOS sus videos de
+ * TODOS los meses (incluidos los cerrados) — videos.client_id y
+ * client_periods.client_id tienen on delete cascade. No hay vuelta atrás;
+ * la confirmación vive en el AlertDialog de edit-client-sheet.tsx.
  */
 export async function deleteClient(clientId: string): Promise<ActionResult> {
   const org = await requireActiveOrganization();
@@ -159,18 +158,6 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
   }
 
   const supabase = await createClient();
-
-  const { count } = await supabase
-    .from("videos")
-    .select("id", { count: "exact", head: true })
-    .eq("client_id", clientId);
-
-  if (count && count > 0) {
-    return {
-      ok: false,
-      error: `No se puede eliminar: este cliente ya tiene ${count} video(s) registrados en el historial.`,
-    };
-  }
 
   const { error } = await supabase
     .from("clients")
@@ -182,6 +169,7 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
 
   revalidatePath("/app/clientes");
   revalidatePath("/app/dashboard");
+  revalidatePath("/app/metricas");
   return { ok: true };
 }
 
