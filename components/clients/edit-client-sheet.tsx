@@ -1,7 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,8 +13,18 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { updateClient, type ActionResult } from "@/lib/actions/clients";
+import { updateClient, deleteClient, type ActionResult } from "@/lib/actions/clients";
 import { ClientBriefFields } from "@/components/clients/client-brief-fields";
 
 const INITIAL_STATE: ActionResult = { ok: true };
@@ -66,11 +79,42 @@ export function EditClientSheet({
     return result;
   }, INITIAL_STATE);
 
+  const router = useRouter();
+  const [isDeleting, startDelete] = useTransition();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  function handleDelete() {
+    if (!client) return;
+    startDelete(async () => {
+      const result = await deleteClient(client.id);
+      if (result.ok) {
+        toast.success("Cliente eliminado");
+        setConfirmingDelete(false);
+        onOpenChange(false);
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
+        <SheetHeader className="flex-row items-center justify-between gap-2 pr-10">
           <SheetTitle>Editar brief — {client?.name}</SheetTitle>
+          {client && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-danger hover:bg-danger/10 hover:text-danger"
+              onClick={() => setConfirmingDelete(true)}
+              aria-label="Eliminar cliente"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
         </SheetHeader>
 
         {client && (
@@ -110,6 +154,29 @@ export function EditClientSheet({
           </form>
         )}
       </SheetContent>
+
+      <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar a {client?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto borra la ficha del cliente para siempre. Solo se puede hacer si nunca
+              tuvo videos registrados — si ya tiene historial, se bloquea en vez de
+              perderlo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-danger text-danger-foreground hover:bg-danger/90"
+            >
+              {isDeleting ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

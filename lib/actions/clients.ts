@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireActiveOrganization } from "@/lib/period/resolve";
 import { CREATE_CLIENT_SCHEMA } from "@/lib/validations/client";
 
 export interface ClientSummary {
@@ -138,6 +139,46 @@ export async function updateClient(clientId: string, formData: FormData): Promis
   if (error) {
     return { ok: false, error: error.message };
   }
+
+  revalidatePath("/app/clientes");
+  revalidatePath("/app/dashboard");
+  return { ok: true };
+}
+
+/**
+ * Borra la ficha del cliente para siempre — solo si nunca tuvo videos
+ * registrados (en ningún mes, abierto o cerrado). Si ya tiene videos, se
+ * bloquea: borrarlo destruiría ese histórico porque videos.client_id tiene
+ * on delete cascade. client_periods se borra solo (mismo cascade) si el
+ * borrado procede.
+ */
+export async function deleteClient(clientId: string): Promise<ActionResult> {
+  const org = await requireActiveOrganization();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { ok: false, error: "No tienes permiso para eliminar clientes." };
+  }
+
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("videos")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId);
+
+  if (count && count > 0) {
+    return {
+      ok: false,
+      error: `No se puede eliminar: este cliente ya tiene ${count} video(s) registrados en el historial.`,
+    };
+  }
+
+  const { error } = await supabase
+    .from("clients")
+    .delete()
+    .eq("id", clientId)
+    .eq("organization_id", org.id);
+
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/app/clientes");
   revalidatePath("/app/dashboard");
