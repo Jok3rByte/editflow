@@ -8,6 +8,13 @@ import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-b
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 
+// Todo lo que cuelga de /app depende de datos que mutan por acción del
+// usuario (videos, periodos, clientes...) — nunca debe quedar estático ni
+// cacheado, para que un cambio se refleje de inmediato sin tener que abrir
+// una pestaña nueva/incógnita.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const organization = await requireActiveOrganization();
   const periods = await listPeriods(organization.id);

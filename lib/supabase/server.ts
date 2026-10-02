@@ -3,6 +3,15 @@ import { cookies } from "next/headers";
 import type { Database } from "@/types/database.types";
 import { supabaseAnonKey, supabaseServiceRoleKey, supabaseUrl } from "./env";
 
+// fetch sin caché: sin esto, el runtime de fetch de Next puede quedarse con
+// una respuesta vieja de una consulta a Supabase y una página recién
+// mutada (ej. un video nuevo) no aparece hasta refrescar en una pestaña
+// sin caché (incógnito). Todas las consultas de servidor deben ser
+// siempre en vivo, nunca cacheadas.
+function noStoreFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, { ...init, cache: "no-store" });
+}
+
 /**
  * Cliente para Server Components / Server Actions / Route Handlers.
  * Respeta la sesión del usuario y por tanto las políticas RLS.
@@ -11,6 +20,7 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(supabaseUrl(), supabaseAnonKey(), {
+    global: { fetch: noStoreFetch },
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -35,6 +45,7 @@ export async function createClient() {
  */
 export function createServiceRoleClient() {
   return createServerClient<Database>(supabaseUrl(), supabaseServiceRoleKey(), {
+    global: { fetch: noStoreFetch },
     cookies: {
       getAll() {
         return [];
