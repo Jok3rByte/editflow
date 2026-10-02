@@ -53,6 +53,7 @@ export interface Database {
           notify_calendar: boolean;
           notify_assignments: boolean;
           notify_weekly_digest: boolean;
+          notify_daily_digest: boolean;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["memberships"]["Row"]> & {

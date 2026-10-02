@@ -78,12 +78,34 @@ NOVIEMBRE 2025 (`...002`) debe devolver `total_videos = 0` en todas las filas.
 
 ## 6. Despliegue en Vercel
 
-1. Importa el repositorio en Vercel.
-2. Configura las mismas variables de entorno de `.env.example`.
-3. Los cron jobs están declarados en `vercel.json` (recordatorios cada 5 min, resumen
-   diario 8:00, resumen semanal el lunes, aviso de cierre de mes) — Vercel los activa
-   solo en producción y llaman a `/api/cron/*` validando `CRON_SECRET`.
-4. `npm run build` debe pasar sin errores antes de cada deploy.
+1. Importa el repositorio en Vercel (plan Hobby).
+2. Configura las mismas variables de entorno de `.env.example`, con los valores reales
+   de producción (incluye `NEXT_PUBLIC_APP_URL` con el dominio final).
+3. `npm run build` debe pasar sin errores antes de cada deploy.
+
+### Cron jobs (servicio externo, no el cron nativo de Vercel)
+
+En el plan Hobby, Vercel solo permite 2 cron jobs y como máximo 1 ejecución al día cada
+uno — no alcanza para los recordatorios cada 5 min. Por eso `vercel.json` no declara
+ningún cron: las 5 rutas de `/api/cron/*` se disparan desde un servicio externo gratuito
+como [cron-job.org](https://cron-job.org), con método `GET`, el header
+`Authorization: Bearer <CRON_SECRET>` (el mismo valor que la variable de entorno), y
+esta frecuencia:
+
+| Ruta                               | Frecuencia         |
+|-------------------------------------|--------------------|
+| `/api/cron/sync-google-calendar`    | cada 10 minutos    |
+| `/api/cron/reminders`               | cada 5 minutos     |
+| `/api/cron/daily-digest`            | cada hora          |
+| `/api/cron/weekly-digest`           | cada hora          |
+| `/api/cron/month-close-reminder`    | 1 vez al día       |
+
+Las rutas de resumen diario/semanal/cierre de mes se pueden llamar más seguido que su
+cadencia real porque cada una decide internamente si ya es la hora (según la zona
+horaria de cada organización) y evita reenviar el mismo día.
+
+Si en algún momento se pasa a Vercel Pro, estos 5 jobs se pueden volver a declarar en
+`vercel.json` con el cron nativo, sin cambiar nada del código de las rutas.
 
 ## 7. Estructura
 

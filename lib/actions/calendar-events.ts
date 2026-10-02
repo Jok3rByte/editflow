@@ -10,16 +10,8 @@ import {
 } from "@/lib/google/calendar";
 import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
 import { sendEventNotificationEmail } from "@/lib/email/send-event-notification";
+import { EVENT_TYPE_LABEL } from "@/lib/utils/event-type-label";
 import type { EventType } from "@/types/database.types";
-
-const EVENT_TYPE_LABEL: Record<string, string> = {
-  reunion: "Reunión",
-  grabacion: "Grabación",
-  entrega: "Entrega",
-  clase: "Clase",
-  evento: "Evento",
-  otro: "Otro",
-};
 
 export interface CreateCalendarEventInput {
   title: string;
@@ -108,6 +100,10 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
       })),
     );
   }
+
+  // Recordatorio por correo 60 minutos antes del evento — lo procesa el
+  // cron de /api/cron/reminders (ver lib/notifications/reminders.ts).
+  await supabase.from("event_reminders").insert({ event_id: event.id, minutes_before: 60 });
 
   // Google Calendar: si no hay cuenta conectada, se sigue de largo (los
   // correos igual salen, por Resend como respaldo).
@@ -245,6 +241,12 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
       })),
     );
   }
+
+  // Reemplaza el recordatorio pendiente: si la hora del evento cambió, que
+  // vuelva a avisar 60 minutos antes de la nueva hora en vez de quedarse
+  // con el sent_at/horario viejo.
+  await supabase.from("event_reminders").delete().eq("event_id", input.id);
+  await supabase.from("event_reminders").insert({ event_id: input.id, minutes_before: 60 });
 
   if (existing.google_event_id) {
     await updateGoogleCalendarEvent(org.id, existing.google_event_id, {

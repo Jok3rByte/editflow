@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { cronSecret } from "@/lib/supabase/env";
+import { requireCronAuth } from "@/lib/cron/auth";
 import { syncAllOrganizations } from "@/lib/google/sync-calendar";
 
 /**
- * Vercel Cron llama acá cada 10 minutos (ver vercel.json) mandando
- * Authorization: Bearer <CRON_SECRET> automáticamente porque la variable
- * de entorno CRON_SECRET está configurada en el proyecto.
+ * Disparado cada 10 minutos por un servicio de cron externo (ver README,
+ * sección de despliegue) mandando Authorization: Bearer <CRON_SECRET>.
  *
  * Por cada organización con Google Calendar conectado, trae los eventos
  * nuevos/editados/cancelados desde la última corrida e importa a
@@ -13,10 +12,8 @@ import { syncAllOrganizations } from "@/lib/google/sync-calendar";
  * título o la descripción.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${cronSecret()}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const unauthorized = requireCronAuth(request);
+  if (unauthorized) return unauthorized;
 
   const resultados = await syncAllOrganizations();
   return NextResponse.json({ ok: true, resultados });
