@@ -1,0 +1,62 @@
+import { createClient } from "@/lib/supabase/server";
+import { requireActiveOrganization, resolveActivePeriod } from "@/lib/period/resolve";
+import { CalendarioClient } from "@/components/app/calendario/calendario-client";
+
+export default async function CalendarioPage() {
+  const org = await requireActiveOrganization();
+  const activePeriod = await resolveActivePeriod(org.id);
+  const supabase = await createClient();
+
+  const hoy = new Date();
+
+  const [{ data: eventos }, { data: miembros }, { data: googleConnection }] = await Promise.all([
+    activePeriod
+      ? supabase
+          .from("v_calendar_events_full")
+          .select("*")
+          .eq("period_id", activePeriod.id)
+          .order("start_at", { ascending: true })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("memberships")
+      .select("id, full_name, email, role")
+      .eq("organization_id", org.id)
+      .eq("active", true)
+      .order("full_name"),
+    supabase.from("google_oauth_tokens").select("google_email").eq("organization_id", org.id).maybeSingle(),
+  ]);
+
+  const puedeEditar = org.role === "owner" || org.role === "admin";
+  const ownerMembership = (miembros ?? []).find((m) => m.role === "owner");
+
+  // Solo los eventos reales tienen fila en event_attendees (los virtuales
+  // "delivery-*" se sintetizan desde videos y no existen en calendar_events).
+  const eventIds = (eventos ?? []).filter((e) => !e.is_virtual).map((e) => e.id);
+  const { data: attendeeRows } = eventIds.length
+    ? await supabase.from("event_attendees").select("event_id, membership_id").in("event_id", eventIds)
+    : { data: [] as { event_id: string; membership_id: string | null }[] };
+
+  // El "responsable" visible es el asistente que no es el propietario (el
+  // propietario siempre queda como asistente para recibir todos los avisos).
+  const asignadoPorEvento: Record<string, string> = {};
+  for (const row of attendeeRows ?? []) {
+    if (row.membership_id && row.membership_id !== ownerMembership?.id) {
+      asignadoPorEvento[row.event_id] = row.membership_id;
+    }
+  }
+
+  return (
+    <CalendarioClient
+      periodId={activePeriod?.id ?? null}
+      periodLabel={activePeriod?.label ?? null}
+      year={activePeriod?.year ?? hoy.getFullYear()}
+      month={activePeriod?.month ?? hoy.getMonth() + 1}
+      timezone={org.timezone}
+      eventos={eventos ?? []}
+      miembros={miembros ?? []}
+      asignadoPorEvento={asignadoPorEvento}
+      googleConectado={Boolean(googleConnection)}
+      puedeEditar={puedeEditar}
+    />
+  );
+}

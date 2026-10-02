@@ -1,0 +1,294 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { requireActiveOrganization } from "@/lib/period/resolve";
+import {
+  createGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
+} from "@/lib/google/calendar";
+import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
+import { sendEventNotificationEmail } from "@/lib/email/send-event-notification";
+import type { EventType } from "@/types/database.types";
+
+const EVENT_TYPE_LABEL: Record<string, string> = {
+  reunion: "Reunión",
+  grabacion: "Grabación",
+  entrega: "Entrega",
+  clase: "Clase",
+  evento: "Evento",
+  otro: "Otro",
+};
+
+export interface CreateCalendarEventInput {
+  title: string;
+  description?: string;
+  type: string;
+  startAt: string; // ISO
+  endAt: string; // ISO
+  clientId?: string;
+  videoId?: string;
+  color?: string;
+  assignedMembershipId?: string;
+}
+
+function formatDateTimeEs(iso: string, timezone: string) {
+  const date = new Date(iso);
+  const dateLabel = new Intl.DateTimeFormat("es-CO", {
+    timeZone: timezone,
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+  const timeLabel = new Intl.DateTimeFormat("es-CO", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+  return { dateLabel, timeLabel };
+}
+
+/**
+ * Crea el evento en EditFlow, lo replica en el Google Calendar conectado
+ * (si hay uno) y avisa por correo: el propietario recibe todos los
+ * eventos, y la persona asignada solo recibe el suyo. El correo sale
+ * literalmente de la bandeja de envío de Gmail del propietario (el mismo
+ * correo con el que se registró) si conectó ese scope; si no, cae a Resend.
+ */
+export async function createCalendarEvent(input: CreateCalendarEventInput) {
+  const org = await requireActiveOrganization();
+  const supabase = await createClient();
+
+  const { data: event, error: insertError } = await supabase
+    .from("calendar_events")
+    .insert({
+      organization_id: org.id,
+      title: input.title,
+      description: input.description,
+      type: input.type as EventType,
+      client_id: input.clientId,
+      video_id: input.videoId,
+      start_at: input.startAt,
+      end_at: input.endAt,
+      color: input.color,
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !event) {
+    throw new Error(insertError?.message ?? "No se pudo crear el evento.");
+  }
+
+  const { data: miembros } = await supabase
+    .from("memberships")
+    .select("id, email, full_name, role, notify_calendar")
+    .eq("organization_id", org.id)
+    .eq("active", true);
+
+  const propietario = miembros?.find((m) => m.role === "owner");
+  const asignado = input.assignedMembershipId
+    ? miembros?.find((m) => m.id === input.assignedMembershipId)
+    : undefined;
+
+  // event_attendees: el propietario siempre (para ver "todos los eventos"),
+  // más la persona asignada si es distinta.
+  const asistentes = [propietario, asignado].filter(
+    (m, i, arr): m is NonNullable<typeof m> => Boolean(m) && arr.findIndex((x) => x?.email === m?.email) === i,
+  );
+
+  if (asistentes.length > 0) {
+    await supabase.from("event_attendees").insert(
+      asistentes.map((m) => ({
+        event_id: event.id,
+        membership_id: m.id,
+        email: m.email,
+        notify: m.notify_calendar,
+      })),
+    );
+  }
+
+  // Google Calendar: si no hay cuenta conectada, se sigue de largo (los
+  // correos igual salen, por Resend como respaldo).
+  if (propietario) {
+    const { data: googleConnection } = await supabase
+      .from("google_oauth_tokens")
+      .select("scope")
+      .eq("organization_id", org.id)
+      .maybeSingle();
+    const gmailSendAvailable = Boolean(googleConnection?.scope?.includes(GMAIL_SEND_SCOPE));
+
+    const googleResult = await createGoogleCalendarEvent(org.id, {
+      title: input.title,
+      description: input.description,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      timeZone: org.timezone,
+      attendeeEmails: asistentes.map((m) => m.email),
+    });
+
+    if (googleResult) {
+      await supabase
+        .from("calendar_events")
+        .update({
+          google_event_id: googleResult.googleEventId,
+          google_html_link: googleResult.htmlLink,
+        })
+        .eq("id", event.id);
+    }
+
+    const { dateLabel, timeLabel } = formatDateTimeEs(input.startAt, org.timezone);
+    const eventTypeLabel = EVENT_TYPE_LABEL[input.type] ?? input.type;
+
+    await Promise.all(
+      asistentes
+        .filter((m) => m.notify_calendar)
+        .map((m) =>
+          sendEventNotificationEmail({
+            to: m.email,
+            ownerEmail: propietario.email,
+            organizationId: org.id,
+            gmailSendAvailable,
+            ownerName: propietario.full_name ?? propietario.email,
+            organizationName: org.name,
+            eventTitle: input.title,
+            eventTypeLabel,
+            dateLabel,
+            timeLabel,
+            recipientIsOwner: m.email === propietario.email,
+            assignedToName: asignado?.full_name ?? asignado?.email,
+            googleCalendarLink: googleResult?.htmlLink,
+          }).catch((err) => {
+            console.error(`No se pudo enviar el correo de notificación a ${m.email}`, err);
+          }),
+        ),
+    );
+  }
+
+  revalidatePath("/app/calendario");
+  return { id: event.id };
+}
+
+export type CalendarActionResult = { ok: true } | { ok: false; error: string };
+
+export interface UpdateCalendarEventInput extends CreateCalendarEventInput {
+  id: string;
+}
+
+/**
+ * Actualiza el evento y, si ya tenía un espejo en Google Calendar, lo
+ * actualiza también. No reenvía el correo de aviso (solo al crear) para no
+ * saturar la bandeja del propietario con un correo por cada ajuste menor.
+ */
+export async function updateCalendarEvent(input: UpdateCalendarEventInput): Promise<CalendarActionResult> {
+  const org = await requireActiveOrganization();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { ok: false, error: "No tienes permiso para editar eventos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("calendar_events")
+    .select("id, google_event_id")
+    .eq("id", input.id)
+    .eq("organization_id", org.id)
+    .maybeSingle();
+
+  if (!existing) {
+    return { ok: false, error: "El evento no existe." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("calendar_events")
+    .update({
+      title: input.title,
+      description: input.description,
+      type: input.type as EventType,
+      client_id: input.clientId ?? null,
+      video_id: input.videoId ?? null,
+      start_at: input.startAt,
+      end_at: input.endAt,
+      color: input.color,
+    })
+    .eq("id", input.id);
+
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  const { data: miembros } = await supabase
+    .from("memberships")
+    .select("id, email, full_name, role, notify_calendar")
+    .eq("organization_id", org.id)
+    .eq("active", true);
+
+  const propietario = miembros?.find((m) => m.role === "owner");
+  const asignado = input.assignedMembershipId
+    ? miembros?.find((m) => m.id === input.assignedMembershipId)
+    : undefined;
+  const asistentes = [propietario, asignado].filter(
+    (m, i, arr): m is NonNullable<typeof m> => Boolean(m) && arr.findIndex((x) => x?.email === m?.email) === i,
+  );
+
+  // Reemplaza los asistentes en vez de diffear: cada evento solo tiene
+  // propietario + un asignado como mucho, no vale la pena el diff.
+  await supabase.from("event_attendees").delete().eq("event_id", input.id);
+  if (asistentes.length > 0) {
+    await supabase.from("event_attendees").insert(
+      asistentes.map((m) => ({
+        event_id: input.id,
+        membership_id: m.id,
+        email: m.email,
+        notify: m.notify_calendar,
+      })),
+    );
+  }
+
+  if (existing.google_event_id) {
+    await updateGoogleCalendarEvent(org.id, existing.google_event_id, {
+      title: input.title,
+      description: input.description,
+      startAt: input.startAt,
+      endAt: input.endAt,
+      timeZone: org.timezone,
+      attendeeEmails: asistentes.map((m) => m.email),
+    });
+  }
+
+  revalidatePath("/app/calendario");
+  return { ok: true };
+}
+
+export async function deleteCalendarEvent(eventId: string): Promise<CalendarActionResult> {
+  const org = await requireActiveOrganization();
+  if (org.role !== "owner" && org.role !== "admin") {
+    return { ok: false, error: "No tienes permiso para eliminar eventos." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("calendar_events")
+    .select("id, google_event_id")
+    .eq("id", eventId)
+    .eq("organization_id", org.id)
+    .maybeSingle();
+
+  if (!existing) {
+    return { ok: false, error: "El evento no existe." };
+  }
+
+  const { error } = await supabase.from("calendar_events").delete().eq("id", eventId);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  if (existing.google_event_id) {
+    await deleteGoogleCalendarEvent(org.id, existing.google_event_id);
+  }
+
+  revalidatePath("/app/calendario");
+  return { ok: true };
+}
