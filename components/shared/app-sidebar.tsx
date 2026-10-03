@@ -23,7 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationBell, type NotificacionRow } from "@/components/app/notification-bell";
 import type { ActiveOrganization } from "@/lib/period/resolve";
 
@@ -52,11 +52,13 @@ function initials(name: string) {
 export function AppSidebar({
   organization,
   memberName,
+  avatarUrl,
   membershipId,
   notificaciones,
 }: {
   organization: ActiveOrganization;
   memberName: string;
+  avatarUrl: string | null;
   membershipId: string;
   notificaciones: NotificacionRow[];
 }) {
@@ -117,14 +119,13 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center gap-2 px-2 py-1.5">
+        <Link href="/app/configuracion" className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-sidebar-accent">
           <Avatar className="size-7">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={memberName} />}
             <AvatarFallback className="text-xs">{initials(memberName)}</AvatarFallback>
           </Avatar>
-          <span className="truncate text-sm group-data-[collapsible=icon]:hidden">
-            {memberName}
-          </span>
-        </div>
+          <span className="truncate text-sm group-data-[collapsible=icon]:hidden">{memberName}</span>
+        </Link>
       </SidebarFooter>
     </Sidebar>
   );

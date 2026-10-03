@@ -26,8 +26,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const { data: perfil } = await supabase
+    .from("memberships")
+    .select("full_name, avatar_url")
+    .eq("id", organization.membershipId)
+    .maybeSingle();
+
   const memberName =
-    (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "Usuario";
+    perfil?.full_name ?? (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "Usuario";
 
   const { data: notificaciones } = await supabase
     .from("notifications")
@@ -47,6 +53,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppSidebar
         organization={organization}
         memberName={memberName}
+        avatarUrl={perfil?.avatar_url ?? null}
         membershipId={organization.membershipId}
         notificaciones={notificaciones ?? []}
       />

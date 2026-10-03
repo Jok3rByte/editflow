@@ -1,6 +1,7 @@
 import { AlertTriangle, Settings } from "lucide-react";
 import { ComingSoon } from "@/components/shared/coming-soon";
 import { GoogleCalendarConnection } from "@/components/settings/google-calendar-connection";
+import { ProfileSettings } from "@/components/settings/profile-settings";
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 
@@ -26,10 +27,33 @@ export default async function ConfiguracionPage({
     .eq("organization_id", org.id)
     .maybeSingle();
 
+  const { data: perfil } = await supabase
+    .from("memberships")
+    .select("full_name, avatar_url, bio, phone")
+    .eq("organization_id", org.id)
+    .eq("user_id", user?.id ?? "")
+    .maybeSingle();
+
   const miCorreo = user?.email ?? "";
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      <section className="rounded-xl border border-border/70 bg-card/60 p-5">
+        <h2 className="text-sm font-semibold">Mi perfil</h2>
+        <p className="mt-1 mb-4 text-xs text-muted-foreground">
+          Tu nombre y tu foto son los que aparecen en la app. La biografía y el teléfono son
+          opcionales.
+        </p>
+        <ProfileSettings
+          userId={user?.id ?? ""}
+          email={miCorreo}
+          fullName={perfil?.full_name ?? ""}
+          avatarUrl={perfil?.avatar_url ?? null}
+          bio={perfil?.bio ?? null}
+          phone={perfil?.phone ?? null}
+        />
+      </section>
+
       <section className="rounded-xl border border-border/70 bg-card/60 p-5">
         <h2 className="text-sm font-semibold">Integración de Google</h2>
 

@@ -49,6 +49,8 @@ export interface Database {
           full_name: string | null;
           email: string;
           avatar_url: string | null;
+          bio: string | null;
+          phone: string | null;
           active: boolean;
           notify_calendar: boolean;
           notify_assignments: boolean;
