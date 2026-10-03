@@ -8,8 +8,6 @@ import {
   createGoogleMeetingEvent,
   deleteGoogleCalendarEvent,
 } from "@/lib/google/calendar";
-import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
-import { sendEventNotificationEmail } from "@/lib/email/send-event-notification";
 import { EVENT_TYPE_LABEL } from "@/lib/utils/event-type-label";
 import type { EventType } from "@/types/database.types";
 
@@ -124,23 +122,28 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
   // Recordatorio por correo 60 minutos antes — lo procesa el cron de reminders.
   await supabase.from("event_reminders").insert({ event_id: event.id, minutes_before: 60 });
 
-  // Notificación en vivo para la persona asignada (si no es quien crea el
-  // evento): queda registrada en notifications y el listener del front la
-  // muestra como toast en tiempo real. Se inserta con service role porque la
-  // fila es para OTRO usuario (RLS no deja insertar notificaciones ajenas).
-  if (asignado && asignado.id !== creador?.id) {
+  // Notificación en la app SOLO para los correos agregados como invitados al
+  // evento que correspondan a un miembro del equipo. Quien no esté en la
+  // lista de invitados no recibe ninguna notificación (ni app ni correo). Se
+  // inserta con service role porque la fila es para OTRO usuario.
+  const invitadosMiembros = ((miembros as Miembro[] | null) ?? []).filter(
+    (m) => invitados.includes(m.email.toLowerCase()) && m.id !== creador?.id,
+  );
+  if (invitadosMiembros.length > 0) {
     const { dateLabel, timeLabel } = formatDateTimeEs(input.startAt, org.timezone);
     const tipoLabel = EVENT_TYPE_LABEL[input.type] ?? input.type;
     const admin = createServiceRoleClient();
-    const { error: notifError } = await admin.from("notifications").insert({
-      organization_id: org.id,
-      recipient_email: asignado.email,
-      membership_id: asignado.id,
-      type: "calendar_event",
-      title: `Nuevo evento: ${input.title}`,
-      body: `${tipoLabel} · ${dateLabel} a las ${timeLabel}`,
-      link: "/app/calendario",
-    });
+    const { error: notifError } = await admin.from("notifications").insert(
+      invitadosMiembros.map((m) => ({
+        organization_id: org.id,
+        recipient_email: m.email,
+        membership_id: m.id,
+        type: "calendar_event",
+        title: `Nuevo evento: ${input.title}`,
+        body: `${tipoLabel} · ${dateLabel} a las ${timeLabel}`,
+        link: "/app/calendario",
+      })),
+    );
     if (notifError) console.error("No se pudo crear la notificación del evento", notifError.message);
   }
 
@@ -160,9 +163,10 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     }
 
     if (creador) {
-      const invitacion = Array.from(
-        new Set([...asistentesEquipo.map((m) => m.email.toLowerCase()), ...invitados]),
-      ).filter((e) => e !== creador.email.toLowerCase());
+      // El correo de invitación (lo manda Google con sendUpdates=all) va SOLO
+      // a los correos agregados como invitados — no al owner ni al asignado,
+      // salvo que su correo esté en la lista.
+      const invitacion = invitados.filter((e) => e !== creador.email.toLowerCase());
 
       const meeting = await createGoogleMeetingEvent(creador.id, {
         title: input.title,
@@ -212,12 +216,13 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     endAt: input.endAt,
     timeZone: org.timezone,
   };
-  const linkPorMiembro = new Map<string, string>();
+  // Espejo del evento en el calendario propio de cada asistente conectado.
+  // No se manda correo ni notificación acá: sin invitados, nadie recibe
+  // aviso (solo aparece el evento en el calendario de quien corresponde).
   await Promise.all(
     asistentes.map(async (m) => {
       const r = await createGoogleCalendarEvent(m.id, googleEvent);
       if (r) {
-        linkPorMiembro.set(m.id, r.htmlLink);
         await supabase
           .from("event_attendees")
           .update({ google_event_id: r.googleEventId, google_html_link: r.htmlLink })
@@ -226,43 +231,6 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
       }
     }),
   );
-
-  if (creador) {
-    const { data: creatorConn } = await supabase
-      .from("google_oauth_tokens")
-      .select("scope")
-      .eq("membership_id", creador.id)
-      .maybeSingle();
-    const gmailSendAvailable = Boolean(creatorConn?.scope?.includes(GMAIL_SEND_SCOPE));
-
-    const { dateLabel, timeLabel } = formatDateTimeEs(input.startAt, org.timezone);
-    const eventTypeLabel = EVENT_TYPE_LABEL[input.type] ?? input.type;
-    const senderName = creador.full_name ?? creador.email;
-
-    await Promise.all(
-      asistentes
-        .filter((m) => m.notify_calendar)
-        .map((m) =>
-          sendEventNotificationEmail({
-            to: m.email,
-            senderMembershipId: creador.id,
-            senderEmail: creador.email,
-            gmailSendAvailable,
-            ownerName: senderName,
-            organizationName: org.name,
-            eventTitle: input.title,
-            eventTypeLabel,
-            dateLabel,
-            timeLabel,
-            recipientIsOwner: m.role === "owner",
-            assignedToName: asignado?.full_name ?? asignado?.email,
-            googleCalendarLink: linkPorMiembro.get(m.id),
-          }).catch((err) => {
-            console.error(`No se pudo enviar el correo de notificación a ${m.email}`, err);
-          }),
-        ),
-    );
-  }
 
   revalidatePath("/app/calendario");
   return { id: event.id };
@@ -384,9 +352,10 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
     }
 
     if (creador) {
-      const invitacion = Array.from(
-        new Set([...asistentesEquipo.map((m) => m.email.toLowerCase()), ...invitados]),
-      ).filter((e) => e !== creador.email.toLowerCase());
+      // El correo de invitación (lo manda Google con sendUpdates=all) va SOLO
+      // a los correos agregados como invitados — no al owner ni al asignado,
+      // salvo que su correo esté en la lista.
+      const invitacion = invitados.filter((e) => e !== creador.email.toLowerCase());
 
       const meeting = await createGoogleMeetingEvent(creador.id, {
         title: input.title,
