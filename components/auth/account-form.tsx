@@ -28,12 +28,26 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
   );
 }
 
-function GoogleButton({ next }: { next: string }) {
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
+function GoogleButton({ next, withConnect }: { next: string; withConnect?: boolean }) {
   async function handleGoogle() {
     const supabase = createClient();
+    // En el signup del owner (withConnect) pedimos ya los permisos de Calendar
+    // y Gmail: así la conexión queda lista en la misma pantalla, sin un paso
+    // aparte. El token se guarda al crear el espacio (createOrganization).
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+      options: {
+        ...(withConnect
+          ? {
+              scopes: `${CALENDAR_SCOPE} ${GMAIL_SEND_SCOPE}`,
+              queryParams: { access_type: "offline", prompt: "consent" },
+            }
+          : {}),
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
   }
   return (
@@ -121,7 +135,7 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
 
   return (
     <div className="space-y-4">
-      <GoogleButton next={next} />
+      <GoogleButton next={next} withConnect />
       <Divider />
       <form action={mlAction} className="space-y-4">
         <input type="hidden" name="next" value={next} />

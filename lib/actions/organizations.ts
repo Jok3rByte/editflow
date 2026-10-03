@@ -59,6 +59,48 @@ export async function createOrganization(formData: FormData): Promise<ActionResu
     await supabase.from("periods").update({ label }).eq("id", periodoAbierto.id);
   }
 
+  // Conexión automática de Google: si el owner creó la cuenta con Google
+  // (otorgando los permisos de Calendar/Gmail en el mismo signup), guardamos
+  // su token ya ligado a su nueva membresía — sin un paso de "conectar" aparte.
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.provider_token) {
+      const googleIdentity = user.identities?.find((i) => i.provider === "google");
+      const googleEmail =
+        (googleIdentity?.identity_data?.email as string | undefined) ?? user.email ?? "";
+      if (googleEmail && googleEmail.toLowerCase() === user.email.toLowerCase()) {
+        const { data: ownerMem } = await supabase
+          .from("memberships")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (ownerMem) {
+          const expiresAt = session.expires_at
+            ? new Date(session.expires_at * 1000).toISOString()
+            : new Date(Date.now() + 3600_000).toISOString();
+          await supabase.from("google_oauth_tokens").upsert(
+            {
+              membership_id: ownerMem.id,
+              organization_id: organizationId,
+              google_email: googleEmail,
+              access_token: session.provider_token,
+              refresh_token: session.provider_refresh_token ?? undefined,
+              expires_at: expiresAt,
+              scope:
+                "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send",
+            },
+            { onConflict: "membership_id" },
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[createOrganization] no se pudo guardar la conexión de Google", err);
+  }
+
   redirect("/app/dashboard");
 }
 
