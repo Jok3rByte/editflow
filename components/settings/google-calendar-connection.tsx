@@ -28,10 +28,27 @@ export function GoogleCalendarConnection({
   async function handleConectar() {
     setConnecting(true);
     const supabase = createClient();
+
+    // Si la cuenta de Google ya está vinculada a esta sesión (de un login o
+    // de un intento de conexión previo), linkIdentity falla con "Identity is
+    // already linked". Para poder re-pedir el consentimiento y obtener tokens
+    // frescos de Calendar/Gmail, primero la desvinculamos. Es seguro porque
+    // el usuario también tiene su identidad de correo (magic link).
+    const { data: identidades } = await supabase.auth.getUserIdentities();
+    const googleIdentity = identidades?.identities?.find((i) => i.provider === "google");
+    if (googleIdentity) {
+      const { error: unlinkError } = await supabase.auth.unlinkIdentity(googleIdentity);
+      if (unlinkError) {
+        toast.error("No se pudo re-conectar con Google", { description: unlinkError.message });
+        setConnecting(false);
+        return;
+      }
+    }
+
     // linkIdentity (no signInWithOAuth): agrega la identidad de Google a la
     // sesión ya activa, sin cambiar de usuario. login_hint preselecciona la
-    // cuenta de Google con la que se registró — y el callback (route.ts)
-    // igual rechaza y desvincula si de todos modos se elige otra cuenta.
+    // cuenta propia — y el callback (route.ts) igual rechaza y desvincula si
+    // de todos modos se elige otra cuenta.
     const { error } = await supabase.auth.linkIdentity({
       provider: "google",
       options: {
