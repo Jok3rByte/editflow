@@ -39,6 +39,9 @@ export default async function ClientesPage() {
   const activeIds = new Set((activeClientIds ?? []).map((c) => c.client_id));
   const inactiveClients = (allClients ?? []).filter((c) => !activeIds.has(c.id));
   const canManage = organization.role === "owner" || organization.role === "admin";
+  // El editor también puede crear un cliente nuevo (no activar históricos ni
+  // editar/eliminar — eso sigue siendo owner/admin).
+  const puedeAgregar = organization.role !== "viewer";
   const clientsById = Object.fromEntries(
     (allClients ?? []).map((c) => [c.id, c as unknown as ClientFull]),
   );
@@ -50,13 +53,15 @@ export default async function ClientesPage() {
           <h1 className="text-xl font-semibold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">{activePeriod.label}</p>
         </div>
-        {canManage && (
+        {puedeAgregar && (
           <div className="flex gap-2">
-            <ActivateExistingClient
-              organizationId={organization.id}
-              periodId={activePeriod.id}
-              candidates={inactiveClients}
-            />
+            {canManage && (
+              <ActivateExistingClient
+                organizationId={organization.id}
+                periodId={activePeriod.id}
+                candidates={inactiveClients}
+              />
+            )}
             <RegisterClientSheet organizationId={organization.id} periodId={activePeriod.id} />
           </div>
         )}

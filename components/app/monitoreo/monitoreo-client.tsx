@@ -338,7 +338,9 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const puedeCrearEliminar = role === "owner" || role === "admin";
+  // Crear: owner/admin/editor. Eliminar: solo owner/admin.
+  const puedeCrear = role !== "viewer";
+  const puedeEliminar = role === "owner" || role === "admin";
   const puedeEditar = role !== "viewer";
   // El resto de columnas (cliente, título, fechas) las bloquea el trigger
   // enforce_editor_video_columns en la base — un editor solo puede tocar
@@ -445,7 +447,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
     });
   }
 
-  const colSpan = puedeCrearEliminar ? 10 : 9;
+  const colSpan = puedeEliminar ? 10 : 9;
 
   return (
     <div className="space-y-6">
@@ -454,7 +456,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
           <h1 className="text-xl font-semibold tracking-tight">Monitoreo</h1>
           <p className="text-sm text-muted-foreground">{periodLabel ?? "Sin periodo activo"}</p>
         </div>
-        {puedeCrearEliminar && (
+        {puedeCrear && (
           <Button onClick={() => setNuevoOpen(true)} disabled={!periodId || clientes.length === 0}>
             <Plus className="size-4" />
             Nuevo video
@@ -485,7 +487,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                 <th className="px-3 py-2.5">Inicio</th>
                 <th className="px-3 py-2.5">Entrega</th>
                 <th className="px-3 py-2.5">Link</th>
-                {puedeCrearEliminar && <th className="w-10 px-3 py-2.5" />}
+                {puedeEliminar && <th className="w-10 px-3 py-2.5" />}
               </tr>
             </thead>
             <tbody>
@@ -590,7 +592,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                         disabled={!puedeEditar || isPending}
                       />
                     </td>
-                    {puedeCrearEliminar && (
+                    {puedeEliminar && (
                       <td className="px-3 py-2">
                         <button
                           type="button"

@@ -21,12 +21,18 @@ export interface CreateVideoInput {
 
 export async function createVideo(input: CreateVideoInput): Promise<VideoActionResult> {
   const org = await requireActiveOrganization();
-  if (org.role !== "owner" && org.role !== "admin") {
+  if (org.role === "viewer") {
     return { ok: false, error: "No tienes permiso para registrar videos." };
   }
   if (!input.title.trim()) {
     return { ok: false, error: "El título es obligatorio." };
   }
+
+  // Un editor solo ve los videos donde es el encargado (RLS videos_select_own),
+  // así que si crea uno sin asignar encargado, se lo asignamos a sí mismo para
+  // que lo pueda ver y trabajar.
+  let editorId = input.editorId || null;
+  if (!editorId && org.role === "editor") editorId = org.membershipId;
 
   const supabase = await createClient();
   const { error } = await supabase.from("videos").insert({
@@ -34,7 +40,7 @@ export async function createVideo(input: CreateVideoInput): Promise<VideoActionR
     period_id: input.periodId,
     client_id: input.clientId,
     title: input.title.trim(),
-    editor_id: input.editorId || null,
+    editor_id: editorId,
     start_date: input.startDate || null,
     due_date: input.dueDate || null,
     priority: input.priority ?? "media",

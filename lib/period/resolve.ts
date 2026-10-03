@@ -11,6 +11,8 @@ export interface ActiveOrganization {
   role: Database["public"]["Enums"]["member_role"];
   timezone: string;
   ownerEmail: string;
+  /** Id de la membresía del usuario actual en esta organización. */
+  membershipId: string;
 }
 
 export interface ActivePeriod {
@@ -43,7 +45,7 @@ export async function requireActiveOrganization(): Promise<ActiveOrganization> {
   // escritura.
   const { data } = await supabase
     .from("memberships")
-    .select("role, organizations(id, name, timezone, owner_email)")
+    .select("id, role, organizations(id, name, timezone, owner_email)")
     .eq("user_id", user.id)
     .eq("active", true)
     .limit(1)
@@ -58,7 +60,14 @@ export async function requireActiveOrganization(): Promise<ActiveOrganization> {
     redirect("/crear-espacio/espacio");
   }
 
-  return { id: org.id, name: org.name, role: data.role, timezone: org.timezone, ownerEmail: org.owner_email };
+  return {
+    id: org.id,
+    name: org.name,
+    role: data.role,
+    timezone: org.timezone,
+    ownerEmail: org.owner_email,
+    membershipId: data.id,
+  };
 }
 
 export async function listPeriods(organizationId: string): Promise<ActivePeriod[]> {
