@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { getInvitationByToken } from "@/lib/actions/invitations";
-import { AccountForm } from "@/components/auth/account-form";
+import { InviteAuthForm } from "@/components/auth/invite-auth-form";
 import { AcceptInvitationButton } from "@/components/auth/accept-invitation-button";
 import { Badge } from "@/components/ui/badge";
 
@@ -66,7 +66,7 @@ export default async function InvitacionPage({
                   </p>
                 )
               ) : (
-                <AccountForm next={`/invitacion/${token}`} modo="acceso" />
+                <InviteAuthForm token={token} email={invitation.email} />
               )}
             </div>
           </>

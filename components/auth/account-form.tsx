@@ -7,40 +7,85 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { sendMagicLink, type MagicLinkState } from "@/lib/actions/auth";
+import {
+  sendMagicLink,
+  signInWithPasswordAction,
+  type MagicLinkState,
+  type PasswordLoginState,
+} from "@/lib/actions/auth";
 
-const INITIAL_STATE: MagicLinkState = { status: "idle" };
+const INITIAL_ML: MagicLinkState = { status: "idle" };
+const INITIAL_PW: PasswordLoginState = { status: "idle" };
 
-function SubmitButton() {
+function SubmitButton({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" className="w-full" disabled={pending}>
-      <Mail className="size-4" />
-      {pending ? "Enviando enlace..." : "Enviar enlace de acceso"}
+      {children}
     </Button>
   );
 }
 
-export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "acceso" }) {
-  const [state, formAction] = useActionState(sendMagicLink, INITIAL_STATE);
-
+function GoogleButton({ next }: { next: string }) {
   async function handleGoogle() {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
   }
+  return (
+    <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
+      Continuar con Google
+    </Button>
+  );
+}
 
-  if (state.status === "sent") {
+function Divider() {
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="h-px flex-1 bg-border" />o con tu correo<div className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "acceso" }) {
+  const [mlState, mlAction] = useActionState(sendMagicLink, INITIAL_ML);
+  const [pwState, pwAction] = useActionState(signInWithPasswordAction, INITIAL_PW);
+
+  // ----- Modo ACCESO (volver a entrar): correo + contraseña o Google. -----
+  if (modo === "acceso") {
+    return (
+      <div className="space-y-4">
+        <GoogleButton next={next} />
+        <Divider />
+        <form action={pwAction} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Correo</Label>
+            <Input id="email" name="email" type="email" placeholder="tu@correo.com" required />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Contraseña</Label>
+            <Input id="password" name="password" type="password" placeholder="••••" required />
+          </div>
+          {pwState.status === "error" && <p className="text-sm text-danger">{pwState.message}</p>}
+          <SubmitButton>Entrar</SubmitButton>
+        </form>
+        <p className="text-center text-xs text-muted-foreground">
+          Si fuiste invitado, entra con tu correo y la contraseña que creaste (o con Google).
+        </p>
+      </div>
+    );
+  }
+
+  // ----- Modo INICIAR (crear espacio): enlace mágico + Google. -----
+  if (mlState.status === "sent") {
     return (
       <div className="rounded-lg border bg-muted/40 p-6 text-center">
         <Mail className="mx-auto size-8 text-primary" />
         <p className="mt-3 font-medium">Revisa tu correo</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Te enviamos un enlace de acceso a <strong>{state.message}</strong>. Ábrelo desde este
+          Te enviamos un enlace de acceso a <strong>{mlState.message}</strong>. Ábrelo desde este
           mismo dispositivo para continuar.
         </p>
       </div>
@@ -49,17 +94,9 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
 
   return (
     <div className="space-y-4">
-      <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
-        Continuar con Google
-      </Button>
-
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <div className="h-px flex-1 bg-border" />
-        o con tu correo
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      <form action={formAction} className="space-y-4">
+      <GoogleButton next={next} />
+      <Divider />
+      <form action={mlAction} className="space-y-4">
         <input type="hidden" name="next" value={next} />
         <div className="space-y-1.5">
           <Label htmlFor="fullName">Nombre completo</Label>
@@ -69,16 +106,14 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
           <Label htmlFor="email">Correo</Label>
           <Input id="email" name="email" type="email" placeholder="lean@correo.com" required />
         </div>
-        {state.status === "error" && (
-          <p className="text-sm text-danger">{state.message}</p>
-        )}
-        <SubmitButton />
+        {mlState.status === "error" && <p className="text-sm text-danger">{mlState.message}</p>}
+        <SubmitButton>
+          <Mail className="size-4" />
+          Enviar enlace de acceso
+        </SubmitButton>
       </form>
-
       <p className="text-center text-xs text-muted-foreground">
-        {modo === "acceso"
-          ? "Sin contraseña: te enviamos un enlace mágico a tu correo."
-          : "Al continuar creas tu cuenta sin necesidad de contraseña."}
+        Al continuar creas tu cuenta sin necesidad de contraseña.
       </p>
     </div>
   );

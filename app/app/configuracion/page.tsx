@@ -51,6 +51,7 @@ export default async function ConfiguracionPage({
           avatarUrl={perfil?.avatar_url ?? null}
           bio={perfil?.bio ?? null}
           phone={perfil?.phone ?? null}
+          puedeEditarNombre={puedeGestionar}
         />
       </section>
 

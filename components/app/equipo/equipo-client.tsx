@@ -100,6 +100,7 @@ export function EquipoClient({
   const [isPending, startTransition] = useTransition();
 
   const [invitarOpen, setInvitarOpen] = useState(false);
+  const [inviteNombre, setInviteNombre] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>("editor");
 
@@ -107,13 +108,14 @@ export function EquipoClient({
 
   function handleInvitar(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !inviteNombre.trim()) return;
     startTransition(async () => {
-      const result = await createInvitation(organizationId, inviteEmail, inviteRole);
+      const result = await createInvitation(organizationId, inviteEmail, inviteRole, inviteNombre);
       if (result.ok) {
         const correo = inviteEmail.trim();
         setInvitarOpen(false);
         setInviteEmail("");
+        setInviteNombre("");
         router.refresh();
         if (result.emailSent) {
           toast.success(`Invitación enviada por correo a ${correo}.`);
@@ -296,6 +298,19 @@ export function EquipoClient({
             <DialogTitle>Invitar a tu equipo</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleInvitar} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-nombre">Nombre</Label>
+              <Input
+                id="invite-nombre"
+                placeholder="Luis Pérez"
+                value={inviteNombre}
+                onChange={(e) => setInviteNombre(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Con este nombre aparecerá en la app. El invitado no puede cambiarlo.
+              </p>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="invite-email">Correo</Label>
               <Input

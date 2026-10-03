@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 import { appUrl } from "@/lib/supabase/env";
 import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
@@ -90,6 +90,52 @@ export async function acceptInvitation(token: string): Promise<ActionResult> {
   redirect("/app/dashboard");
 }
 
+/**
+ * El invitado entra con su correo (el mismo de la invitación) y una
+ * contraseña que él crea. Si es la primera vez, se crea su cuenta ya
+ * confirmada (sin correo de confirmación); si ya la tenía, inicia sesión con
+ * la misma contraseña. Luego acepta la invitación. Así puede volver a entrar
+ * con correo+contraseña cada vez, sin usar el link de invitación de nuevo.
+ */
+export async function ingresarConInvitacion(token: string, password: string): Promise<ActionResult> {
+  if (!/^\d{4,}$/.test(password)) {
+    return { ok: false, error: "La contraseña debe ser de al menos 4 dígitos (solo números)." };
+  }
+
+  const supabase = await createClient();
+  const { data: invData } = await supabase.rpc("get_invitation", { p_token: token });
+  const inv = invData?.[0];
+  if (!inv) return { ok: false, error: "La invitación no existe o ya no está disponible." };
+  if (inv.status === "revocada") return { ok: false, error: "Esta invitación fue revocada." };
+
+  const email = inv.email;
+  const admin = createServiceRoleClient();
+
+  // Crea la cuenta confirmada si no existe (sin mandar correo). Si ya existe,
+  // se ignora y se intenta iniciar sesión con la contraseña dada.
+  const { error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (createErr && !/registered|already|exist/i.test(createErr.message)) {
+    return { ok: false, error: createErr.message };
+  }
+
+  const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
+  if (signErr) {
+    return {
+      ok: false,
+      error: "Contraseña incorrecta. Si ya habías creado una, ingrésala; si la olvidaste, pide una invitación nueva.",
+    };
+  }
+
+  const { error: acceptErr } = await supabase.rpc("accept_invitation", { p_token: token, p_full_name: email });
+  if (acceptErr) return { ok: false, error: acceptErr.message };
+
+  redirect("/app/dashboard");
+}
+
 export type CreateInvitationResult =
   | { ok: true; link: string; emailSent: boolean }
   | { ok: false; error: string };
@@ -105,17 +151,21 @@ export async function createInvitation(
   organizationId: string,
   email: string,
   role: MemberRole,
+  fullName: string,
 ): Promise<CreateInvitationResult> {
   const org = await requireActiveOrganization();
   if (org.role !== "owner" && org.role !== "admin") {
     return { ok: false, error: "Solo el propietario o un administrador puede invitar miembros." };
+  }
+  if (!fullName.trim()) {
+    return { ok: false, error: "Ponle un nombre al invitado — así aparecerá en la app." };
   }
 
   const supabase = await createClient();
   const invitedEmail = email.trim().toLowerCase();
   const { data, error } = await supabase
     .from("invitations")
-    .insert({ organization_id: organizationId, email: invitedEmail, role })
+    .insert({ organization_id: organizationId, email: invitedEmail, role, full_name: fullName.trim() })
     .select("token")
     .single();
 

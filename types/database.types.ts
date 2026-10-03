@@ -72,6 +72,7 @@ export interface Database {
           organization_id: string;
           email: string;
           role: MemberRole;
+          full_name: string | null;
           token: string;
           status: InvitationStatus;
           invited_by: string | null;

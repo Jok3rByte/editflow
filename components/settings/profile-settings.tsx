@@ -70,6 +70,7 @@ export function ProfileSettings({
   avatarUrl,
   bio,
   phone,
+  puedeEditarNombre,
 }: {
   userId: string;
   email: string;
@@ -77,6 +78,7 @@ export function ProfileSettings({
   avatarUrl: string | null;
   bio: string | null;
   phone: string | null;
+  puedeEditarNombre: boolean;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -172,7 +174,13 @@ export function ProfileSettings({
             onChange={(e) => setNombre(e.target.value)}
             placeholder="Tu nombre"
             required
+            disabled={!puedeEditarNombre}
           />
+          {!puedeEditarNombre && (
+            <p className="text-xs text-muted-foreground">
+              Tu nombre lo asigna el propietario o administrador.
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="perfil-telefono">Teléfono</Label>

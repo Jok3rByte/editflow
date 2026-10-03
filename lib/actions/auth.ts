@@ -70,22 +70,62 @@ export async function updateProfile(input: UpdateProfileInput): Promise<ProfileR
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "No has iniciado sesión." };
 
-  const nombre = input.fullName.trim();
-  if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
-
   const admin = createServiceRoleClient();
-  const { error } = await admin
+
+  // El nombre lo asigna el owner/admin: un invitado (editor/viewer) solo puede
+  // cambiar foto, bio y teléfono, no su nombre. Se permite cambiar el nombre
+  // únicamente si el usuario es owner/admin en alguna organización.
+  const { data: mems } = await admin
     .from("memberships")
-    .update({
-      full_name: nombre,
-      avatar_url: input.avatarUrl,
-      bio: input.bio?.trim() || null,
-      phone: input.phone?.trim() || null,
-    })
-    .eq("user_id", user.id);
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("active", true);
+  const puedeCambiarNombre = (mems ?? []).some((m) => m.role === "owner" || m.role === "admin");
+
+  const patch: {
+    avatar_url: string | null;
+    bio: string | null;
+    phone: string | null;
+    full_name?: string;
+  } = {
+    avatar_url: input.avatarUrl,
+    bio: input.bio?.trim() || null,
+    phone: input.phone?.trim() || null,
+  };
+  if (puedeCambiarNombre) {
+    const nombre = input.fullName.trim();
+    if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
+    patch.full_name = nombre;
+  }
+
+  const { error } = await admin.from("memberships").update(patch).eq("user_id", user.id);
 
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/app");
   return { ok: true };
+}
+
+export interface PasswordLoginState {
+  status: "idle" | "error";
+  message?: string;
+}
+
+export async function signInWithPasswordAction(
+  _prev: PasswordLoginState,
+  formData: FormData,
+): Promise<PasswordLoginState> {
+  const email = (formData.get("email") as string | null)?.trim() ?? "";
+  const password = (formData.get("password") as string | null) ?? "";
+  if (!email || !password) {
+    return { status: "error", message: "Ingresa tu correo y tu contraseña." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    return { status: "error", message: "Correo o contraseña incorrectos." };
+  }
+
+  redirect("/app/dashboard");
 }
