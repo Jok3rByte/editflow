@@ -95,7 +95,9 @@ export async function updateVideo(input: UpdateVideoInput): Promise<VideoActionR
 
 export async function deleteVideo(videoId: string): Promise<VideoActionResult> {
   const org = await requireActiveOrganization();
-  if (org.role !== "owner" && org.role !== "admin") {
+  // owner/admin eliminan cualquier video; el editor solo los suyos (lo aplica
+  // la policy RLS videos_delete). El viewer no puede eliminar.
+  if (org.role === "viewer") {
     return { ok: false, error: "No tienes permiso para eliminar videos." };
   }
 

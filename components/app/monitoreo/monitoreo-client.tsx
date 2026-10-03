@@ -338,9 +338,10 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Crear: owner/admin/editor. Eliminar: solo owner/admin.
+  // Crear y eliminar: owner/admin/editor (el editor solo ve/elimina sus
+  // propios videos, lo acota RLS). El viewer es solo lectura.
   const puedeCrear = role !== "viewer";
-  const puedeEliminar = role === "owner" || role === "admin";
+  const puedeEliminar = role !== "viewer";
   const puedeEditar = role !== "viewer";
   // El resto de columnas (cliente, título, fechas) las bloquea el trigger
   // enforce_editor_video_columns en la base — un editor solo puede tocar
@@ -564,7 +565,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                       />
                     </td>
                     <td className="px-3 py-2">
-                      {puedeEditar && !soloEstado ? (
+                      {puedeEditar ? (
                         <DatePickerField
                           value={video.start_date ? new Date(`${video.start_date}T00:00:00`) : undefined}
                           onChange={(d) => handleCambiarFecha(video, "startDate", d)}
@@ -575,7 +576,7 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      {puedeEditar && !soloEstado ? (
+                      {puedeEditar ? (
                         <DatePickerField
                           value={video.due_date ? new Date(`${video.due_date}T00:00:00`) : undefined}
                           onChange={(d) => handleCambiarFecha(video, "dueDate", d)}
