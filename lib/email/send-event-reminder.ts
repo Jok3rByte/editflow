@@ -16,7 +16,7 @@ export async function sendEventReminderEmail(input: SendEventReminderInput) {
   await resend.emails.send({
     from: emailFrom(),
     to,
-    subject: `${templateProps.eventTitle} empieza en ${templateProps.minutesBefore} minutos`,
+    subject: `EditFlow · ${templateProps.eventTitle} empieza en ${templateProps.minutesBefore} minutos`,
     html,
   });
 }

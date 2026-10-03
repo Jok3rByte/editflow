@@ -34,7 +34,7 @@ export interface SendEventNotificationInput extends EventNotificationEmailProps 
  */
 export async function sendEventNotificationEmail(input: SendEventNotificationInput) {
   const { to, senderEmail, senderMembershipId, gmailSendAvailable, eventTitle, ...templateProps } = input;
-  const subject = `${eventTitle} — EditFlow`;
+  const subject = `EditFlow · ${eventTitle}`;
   const html = await render(EventNotificationEmail({ eventTitle, ...templateProps }));
 
   if (gmailSendAvailable) {

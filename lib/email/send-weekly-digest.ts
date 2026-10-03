@@ -15,7 +15,7 @@ export async function sendWeeklyDigestEmail(input: SendWeeklyDigestInput) {
   await resend.emails.send({
     from: emailFrom(),
     to,
-    subject: `Resumen semanal — ${templateProps.organizationName}`,
+    subject: `EditFlow · Resumen semanal — ${templateProps.organizationName}`,
     html,
   });
 }

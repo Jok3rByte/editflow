@@ -15,7 +15,7 @@ export async function sendDailyDigestEmail(input: SendDailyDigestInput) {
   await resend.emails.send({
     from: emailFrom(),
     to,
-    subject: `Resumen diario — ${templateProps.organizationName}`,
+    subject: `EditFlow · Resumen diario — ${templateProps.organizationName}`,
     html,
   });
 }

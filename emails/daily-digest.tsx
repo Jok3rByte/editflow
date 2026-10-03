@@ -5,6 +5,7 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Preview,
   Section,
   Text,
@@ -51,6 +52,13 @@ export default function DailyDigestEmail({
       <Preview>Resumen diario de {organizationName} — {dateLabel}</Preview>
       <Body style={main}>
         <Container style={container}>
+          <Img
+            src="https://editflow-gules.vercel.app/logo-mark.png"
+            width="32"
+            height="32"
+            alt="EditFlow"
+            style={{ marginBottom: "12px" }}
+          />
           <Text style={brand}>
             Edit<span style={{ color: "#8B5CF6" }}>Flow</span>
           </Text>

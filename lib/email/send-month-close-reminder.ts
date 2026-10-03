@@ -17,7 +17,7 @@ export async function sendMonthCloseReminderEmail(input: SendMonthCloseReminderI
   await resend.emails.send({
     from: emailFrom(),
     to,
-    subject: `${templateProps.periodLabel} cierra en ${templateProps.diasRestantes} días`,
+    subject: `EditFlow · ${templateProps.periodLabel} cierra en ${templateProps.diasRestantes} días`,
     html,
   });
 }
