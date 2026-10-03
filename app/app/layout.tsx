@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listPeriods, requireActiveOrganization, resolveActivePeriod } from "@/lib/period/resolve";
 import { currentYearMonthInTimezone } from "@/lib/utils/dates";
 import { AppSidebar } from "@/components/shared/app-sidebar";
+import { RealtimeRefresher } from "@/components/app/realtime-refresher";
 import { PeriodSwitcher } from "@/components/period/period-switcher";
 import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-banner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -34,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SidebarProvider>
+      <RealtimeRefresher organizationId={organization.id} />
       <AppSidebar organization={organization} memberName={memberName} />
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
