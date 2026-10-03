@@ -24,6 +24,7 @@ export interface EventNotificationEmailProps {
   recipientIsOwner: boolean;
   assignedToName?: string;
   googleCalendarLink?: string;
+  meetLink?: string;
 }
 
 export default function EventNotificationEmail({
@@ -36,6 +37,7 @@ export default function EventNotificationEmail({
   recipientIsOwner,
   assignedToName,
   googleCalendarLink,
+  meetLink,
 }: EventNotificationEmailProps) {
   return (
     <Html>
@@ -69,22 +71,25 @@ export default function EventNotificationEmail({
           </Section>
 
           <Text style={paragraph}>
-            {recipientIsOwner
-              ? `Como propietario de ${organizationName}, recibes todos los eventos del calendario del equipo.`
-              : `${ownerName} te asignó este evento en ${organizationName}.`}
-            {" "}
-            Ya quedó agendado en Google Calendar
-            {googleCalendarLink ? (
-              <>
-                {" — "}
-                <Link href={googleCalendarLink} style={link}>
-                  verlo en Google Calendar
-                </Link>
-              </>
-            ) : (
-              "."
-            )}
+            {ownerName} te invitó a este evento en {organizationName}. Ya quedó en tu calendario.
           </Text>
+
+          {meetLink && (
+            <Section style={{ textAlign: "center" as const, margin: "24px 0" }}>
+              <Link href={meetLink} style={button}>
+                Unirse a la reunión de Meet
+              </Link>
+            </Section>
+          )}
+
+          {googleCalendarLink && (
+            <Text style={paragraph}>
+              O ábrelo aquí:{" "}
+              <Link href={googleCalendarLink} style={link}>
+                {meetLink ? "enlace de la reunión" : "ver en el calendario"}
+              </Link>
+            </Text>
+          )}
 
           <Hr style={hr} />
           <Text style={footer}>
@@ -156,6 +161,17 @@ const paragraph = {
 const link = {
   color: "#8B5CF6",
   textDecoration: "underline",
+};
+
+const button = {
+  backgroundColor: "#8B5CF6",
+  borderRadius: "10px",
+  color: "#ffffff",
+  display: "inline-block",
+  fontSize: "15px",
+  fontWeight: 600,
+  padding: "12px 28px",
+  textDecoration: "none",
 };
 
 const hr = {

@@ -8,6 +8,8 @@ import {
   createGoogleMeetingEvent,
   deleteGoogleCalendarEvent,
 } from "@/lib/google/calendar";
+import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
+import { sendEventNotificationEmail } from "@/lib/email/send-event-notification";
 import { EVENT_TYPE_LABEL } from "@/lib/utils/event-type-label";
 import type { EventType } from "@/types/database.types";
 
@@ -163,9 +165,7 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     }
 
     if (creador) {
-      // El correo de invitación (lo manda Google con sendUpdates=all) va SOLO
-      // a los correos agregados como invitados — no al owner ni al asignado,
-      // salvo que su correo esté en la lista.
+      // Invitados a notificar (los correos agregados), sin el creador.
       const invitacion = invitados.filter((e) => e !== creador.email.toLowerCase());
 
       const meeting = await createGoogleMeetingEvent(creador.id, {
@@ -189,6 +189,41 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
           })
           .eq("id", event.id);
       }
+
+      // El correo lo manda EditFlow (no Google) para que el asunto sea
+      // "EditFlow · <evento>". Va a cada invitado, con el enlace de Meet.
+      const { data: creatorConn } = await supabase
+        .from("google_oauth_tokens")
+        .select("scope")
+        .eq("membership_id", creador.id)
+        .maybeSingle();
+      const gmailSendAvailable = Boolean(creatorConn?.scope?.includes(GMAIL_SEND_SCOPE));
+      const { dateLabel, timeLabel } = formatDateTimeEs(input.startAt, org.timezone);
+      const eventTypeLabel = EVENT_TYPE_LABEL[input.type] ?? input.type;
+      const enlace = meeting?.meetLink ?? meeting?.htmlLink ?? undefined;
+
+      await Promise.all(
+        invitacion.map((email) =>
+          sendEventNotificationEmail({
+            to: email,
+            senderMembershipId: creador.id,
+            senderEmail: creador.email,
+            gmailSendAvailable,
+            ownerName: creador.full_name ?? creador.email,
+            organizationName: org.name,
+            eventTitle: input.title,
+            eventTypeLabel,
+            dateLabel,
+            timeLabel,
+            recipientIsOwner: false,
+            assignedToName: asignado?.full_name ?? asignado?.email,
+            meetLink: meeting?.meetLink ?? undefined,
+            googleCalendarLink: enlace,
+          }).catch((err) => {
+            console.error(`No se pudo enviar el correo del evento a ${email}`, err);
+          }),
+        ),
+      );
     }
 
     revalidatePath("/app/calendario");
