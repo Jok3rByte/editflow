@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 import type { Database, VideoPriority, VideoStatus } from "@/types/database.types";
 
@@ -90,6 +90,97 @@ export async function updateVideo(input: UpdateVideoInput): Promise<VideoActionR
 
   revalidatePath("/app/monitoreo");
   revalidatePath("/app/calendario"); // due_date mueve el evento virtual de entrega
+  return { ok: true };
+}
+
+export type AlertaVideoTipo = "video_estancado" | "video_completado";
+
+/**
+ * Crea una notificación en la campanita para una alerta de monitoreo (un video
+ * que lleva más de 1 hora sin avanzar, o uno que llegó al 100%). La detección
+ * pasa en el cliente (monitoreo-client), pero el registro en la tabla
+ * `notifications` tiene que ir con service role porque esa tabla no tiene
+ * policy de INSERT para usuarios. La reciben el owner/admin (que monitorean) y
+ * el editor encargado del video. Se evita duplicar: si ya hay una alerta igual
+ * (mismo video, mismo tipo) en la última hora, no se inserta otra — así da lo
+ * mismo que haya varias personas con el monitoreo abierto disparándola.
+ */
+export async function registrarAlertaVideo(
+  videoId: string,
+  tipo: AlertaVideoTipo,
+): Promise<VideoActionResult> {
+  const org = await requireActiveOrganization();
+  const supabase = await createClient();
+
+  const { data: video } = await supabase
+    .from("videos")
+    .select("id, title, progreso, editor_id, organization_id, clients(name)")
+    .eq("id", videoId)
+    .maybeSingle();
+
+  if (!video || video.organization_id !== org.id) {
+    return { ok: false, error: "Video no encontrado." };
+  }
+
+  const clientName =
+    (video.clients as unknown as { name: string } | null)?.name ?? "—";
+  const title =
+    tipo === "video_completado"
+      ? `✅ "${video.title}" llegó al 100%`
+      : `⚠️ "${video.title}" lleva más de 1 hora sin avanzar`;
+  const body =
+    tipo === "video_completado"
+      ? `${clientName} · listo para revisión`
+      : `${clientName} · avance ${video.progreso}%`;
+
+  const admin = createServiceRoleClient();
+
+  // Dedupe: no repetir la misma alerta de este video dentro de la última hora.
+  const haceUnaHora = new Date(Date.now() - 55 * 60_000).toISOString();
+  const { data: reciente } = await admin
+    .from("notifications")
+    .select("id")
+    .eq("organization_id", org.id)
+    .eq("type", tipo)
+    .eq("title", title)
+    .gte("created_at", haceUnaHora)
+    .limit(1)
+    .maybeSingle();
+  if (reciente) return { ok: true };
+
+  // Destinatarios: owner/admin (monitorean) + el editor encargado, sin repetir.
+  const destinatarios = new Map<string, string>();
+  const { data: gestores } = await admin
+    .from("memberships")
+    .select("id, email")
+    .eq("organization_id", org.id)
+    .eq("active", true)
+    .in("role", ["owner", "admin"]);
+  for (const g of gestores ?? []) destinatarios.set(g.id, g.email);
+
+  if (video.editor_id) {
+    const { data: editor } = await admin
+      .from("memberships")
+      .select("id, email, active")
+      .eq("id", video.editor_id)
+      .maybeSingle();
+    if (editor?.active) destinatarios.set(editor.id, editor.email);
+  }
+
+  if (destinatarios.size === 0) return { ok: true };
+
+  const { error } = await admin.from("notifications").insert(
+    [...destinatarios.entries()].map(([membership_id, email]) => ({
+      organization_id: org.id,
+      recipient_email: email,
+      membership_id,
+      type: tipo,
+      title,
+      body,
+      link: "/app/monitoreo",
+    })),
+  );
+  if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
 

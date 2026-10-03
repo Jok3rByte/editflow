@@ -35,8 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePickerField } from "@/components/preview/date-picker-field";
-import { playSuccessSound, playAlertSound } from "@/lib/preview/notification-sounds";
-import { createVideo, updateVideo, deleteVideo } from "@/lib/actions/videos";
+import { createVideo, updateVideo, deleteVideo, registrarAlertaVideo } from "@/lib/actions/videos";
 import { formatDateEs } from "@/lib/utils/dates";
 import { gradientePorProgreso } from "@/lib/utils/progress-color";
 import { cn } from "@/lib/utils";
@@ -376,10 +375,9 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
         const estancado = v.status === "edicion" && v.progreso < 100 && base !== null && minutos >= 60;
         if (estancado && !alertadosRef.current.has(v.id)) {
           alertadosRef.current.add(v.id);
-          playAlertSound();
-          toast.warning(`"${v.title}" lleva más de 1 hora sin avanzar`, {
-            description: `${v.clients?.name ?? "—"} · avance ${v.progreso}%`,
-          });
+          // La alerta sale en la campanita (con sonido de alerta): registramos
+          // la notificación y el NotificationBell la muestra y la suena.
+          void registrarAlertaVideo(v.id, "video_estancado");
         }
         if (!estancado) alertadosRef.current.delete(v.id);
       }
@@ -444,8 +442,8 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
       const result = await updateVideo({ id: video.id, progreso });
       if (result.ok) {
         if (progreso >= 100) {
-          playSuccessSound();
-          toast.success(`"${video.title}" llegó al 100% 🎉`);
+          // El "llegó al 100%" sale en la campanita (con sonido de check).
+          void registrarAlertaVideo(video.id, "video_completado");
         }
         router.refresh();
       } else {

@@ -37,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: notificaciones } = await supabase
     .from("notifications")
-    .select("id, title, body, link, read_at, created_at")
+    .select("id, title, body, link, read_at, created_at, type")
     .eq("membership_id", organization.membershipId)
     .order("created_at", { ascending: false })
     .limit(30);

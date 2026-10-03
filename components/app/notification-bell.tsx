@@ -6,7 +6,7 @@ import { Bell } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { createClient } from "@/lib/supabase/client";
-import { playBellSound } from "@/lib/preview/notification-sounds";
+import { playBellSound, playAlertSound, playSuccessSound } from "@/lib/preview/notification-sounds";
 
 export interface NotificacionRow {
   id: string;
@@ -15,6 +15,15 @@ export interface NotificacionRow {
   link: string | null;
   read_at: string | null;
   created_at: string;
+  type?: string | null;
+}
+
+// Cada tipo de notificación suena distinto en la campanita: alerta para los
+// estancamientos, check para los 100%, campana para todo lo demás.
+function sonarPorTipo(type?: string | null) {
+  if (type === "video_estancado") playAlertSound();
+  else if (type === "video_completado") playSuccessSound();
+  else playBellSound();
 }
 
 function tiempoRelativo(iso: string): string {
@@ -63,7 +72,7 @@ export function NotificationBell({
           (payload) => {
             const n = payload.new as NotificacionRow;
             setItems((prev) => [n, ...prev.filter((x) => x.id !== n.id)].slice(0, 30));
-            playBellSound();
+            sonarPorTipo(n.type);
             toast(n.title, { description: n.body ?? undefined });
           },
         );
