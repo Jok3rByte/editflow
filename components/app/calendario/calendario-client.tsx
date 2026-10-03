@@ -77,6 +77,7 @@ interface CalendarioClientProps {
   asignadoPorEvento: Record<string, string>;
   invitadosPorEvento: Record<string, string[]>;
   conMeetPorEvento: Record<string, boolean>;
+  meetUrlPorEvento: Record<string, string>;
   googleConectado: boolean;
   puedeEditar: boolean;
 }
@@ -278,6 +279,7 @@ function EventoCamposForm({
   month,
   responsables,
   disabled,
+  meetUrl,
 }: {
   state: FormState;
   setState: (s: FormState) => void;
@@ -285,6 +287,8 @@ function EventoCamposForm({
   month: number;
   responsables: Miembro[];
   disabled?: boolean;
+  /** Link real de Google Meet del evento (solo al ver/editar uno existente). */
+  meetUrl?: string | null;
 }) {
   return (
     <>
@@ -382,6 +386,18 @@ function EventoCamposForm({
           disabled={disabled}
         />
       </div>
+
+      {meetUrl && (
+        <a
+          href={meetUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <Video className="size-4" />
+          Unirse a la reunión de Meet
+        </a>
+      )}
     </>
   );
 }
@@ -397,6 +413,7 @@ export function CalendarioClient({
   asignadoPorEvento,
   invitadosPorEvento,
   conMeetPorEvento,
+  meetUrlPorEvento,
   googleConectado,
   puedeEditar,
 }: CalendarioClientProps) {
@@ -738,6 +755,7 @@ export function CalendarioClient({
               month={month}
               responsables={responsables}
               disabled={!puedeEditar || isPending}
+              meetUrl={eventoDetalle ? meetUrlPorEvento[eventoDetalle.id] : undefined}
             />
             <DialogFooter>
               {puedeEditar ? (

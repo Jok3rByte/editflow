@@ -57,8 +57,12 @@ export default async function CalendarioPage() {
   }
 
   const conMeetPorEvento: Record<string, boolean> = {};
+  const meetUrlPorEvento: Record<string, string> = {};
   for (const row of meetingRows ?? []) {
-    if (row.meeting_url) conMeetPorEvento[row.id] = true;
+    if (row.meeting_url) {
+      conMeetPorEvento[row.id] = true;
+      meetUrlPorEvento[row.id] = row.meeting_url;
+    }
   }
 
   return (
@@ -73,6 +77,7 @@ export default async function CalendarioPage() {
       asignadoPorEvento={asignadoPorEvento}
       invitadosPorEvento={invitadosPorEvento}
       conMeetPorEvento={conMeetPorEvento}
+      meetUrlPorEvento={meetUrlPorEvento}
       googleConectado={Boolean(googleConnection)}
       puedeEditar={puedeEditar}
     />

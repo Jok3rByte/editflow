@@ -40,6 +40,37 @@ export function playSuccessSound() {
   }
 }
 
+// Campana de notificación: dos tonos claros tipo "ding-dong" para cuando
+// llega una actividad nueva al usuario.
+export function playBellSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const notas = [987.77, 659.25]; // Si5 -> Mi5 (ding-dong)
+
+    notas.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+
+      const inicio = ctx.currentTime + i * 0.16;
+      gain.gain.setValueAtTime(0, inicio);
+      gain.gain.linearRampToValueAtTime(0.25, inicio + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, inicio + 0.55);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(inicio);
+      osc.stop(inicio + 0.6);
+    });
+
+    setTimeout(() => ctx.close(), 1000);
+  } catch {
+    // Sin soporte de audio — no bloquea el resto del flujo.
+  }
+}
+
 // Dos bips graves y cortos, tono de alarma — para cuando un video se
 // estanca en edición y hay que avisar en rojo, ya (no arrancó a tiempo, o
 // lleva demasiado con un % bajo).

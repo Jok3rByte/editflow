@@ -24,6 +24,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { NotificationBell, type NotificacionRow } from "@/components/app/notification-bell";
 import type { ActiveOrganization } from "@/lib/period/resolve";
 
 const MODULOS = [
@@ -51,9 +52,13 @@ function initials(name: string) {
 export function AppSidebar({
   organization,
   memberName,
+  membershipId,
+  notificaciones,
 }: {
   organization: ActiveOrganization;
   memberName: string;
+  membershipId: string;
+  notificaciones: NotificacionRow[];
 }) {
   const pathname = usePathname();
 
@@ -67,6 +72,9 @@ export function AppSidebar({
           <div className="flex min-w-0 flex-col group-data-[collapsible=icon]:hidden">
             <span className="truncate text-sm font-semibold">EditFlow</span>
             <span className="truncate text-xs text-muted-foreground">{organization.name}</span>
+          </div>
+          <div className="ml-auto group-data-[collapsible=icon]:hidden">
+            <NotificationBell membershipId={membershipId} initial={notificaciones} />
           </div>
         </div>
       </SidebarHeader>

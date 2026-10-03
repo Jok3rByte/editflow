@@ -4,7 +4,6 @@ import { listPeriods, requireActiveOrganization, resolveActivePeriod } from "@/l
 import { currentYearMonthInTimezone } from "@/lib/utils/dates";
 import { AppSidebar } from "@/components/shared/app-sidebar";
 import { RealtimeRefresher } from "@/components/app/realtime-refresher";
-import { NotificationsListener } from "@/components/app/notifications-listener";
 import { PeriodSwitcher } from "@/components/period/period-switcher";
 import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-banner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -29,6 +28,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const memberName =
     (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "Usuario";
 
+  const { data: notificaciones } = await supabase
+    .from("notifications")
+    .select("id, title, body, link, read_at, created_at")
+    .eq("membership_id", organization.membershipId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
   const canManagePeriods = organization.role === "owner" || organization.role === "admin";
 
   const { year: currentYear, month: currentMonth } = currentYearMonthInTimezone(organization.timezone);
@@ -37,8 +43,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider>
       <RealtimeRefresher organizationId={organization.id} />
-      <NotificationsListener membershipId={organization.membershipId} />
-      <AppSidebar organization={organization} memberName={memberName} />
+      <AppSidebar
+        organization={organization}
+        memberName={memberName}
+        membershipId={organization.membershipId}
+        notificaciones={notificaciones ?? []}
+      />
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
           <SidebarTrigger />
