@@ -557,22 +557,24 @@ export function CalendarioClient({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {googleConectado ? (
-            <Badge variant="outline" className="gap-1 border-success/40 text-success">
-              <CalendarCheck2 className="size-3.5" />
-              Google Calendar conectado
-            </Badge>
-          ) : (
-            <Link href="/app/configuracion">
-              <Badge
-                variant="outline"
-                className="gap-1 text-muted-foreground hover:border-primary/40 hover:text-primary"
-              >
+          {/* La conexión de Google la gestiona solo el administrador. */}
+          {puedeEditar &&
+            (googleConectado ? (
+              <Badge variant="outline" className="gap-1 border-success/40 text-success">
                 <CalendarCheck2 className="size-3.5" />
-                Conectar Google Calendar
+                Google Calendar conectado
               </Badge>
-            </Link>
-          )}
+            ) : (
+              <Link href="/app/configuracion">
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-muted-foreground hover:border-primary/40 hover:text-primary"
+                >
+                  <CalendarCheck2 className="size-3.5" />
+                  Conectar Google Calendar
+                </Badge>
+              </Link>
+            ))}
           <Button
             onClick={() => abrirNuevoEvento(nuevoState.dia || 1)}
             disabled={!puedeEditar || !periodId}

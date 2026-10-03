@@ -11,6 +11,7 @@ export default async function ConfiguracionPage({
 }) {
   const { google_error: googleError } = await searchParams;
   const org = await requireActiveOrganization();
+  const puedeGestionar = org.role === "owner" || org.role === "admin";
   const supabase = await createClient();
 
   const {
@@ -18,7 +19,7 @@ export default async function ConfiguracionPage({
   } = await supabase.auth.getUser();
 
   // RLS solo deja ver la conexión propia del usuario, así que esta consulta
-  // trae su fila (si conectó) — cada miembro gestiona la suya.
+  // trae su fila (si conectó).
   const { data: googleConnection } = await supabase
     .from("google_oauth_tokens")
     .select("google_email")
@@ -30,39 +31,52 @@ export default async function ConfiguracionPage({
   return (
     <div className="flex flex-1 flex-col gap-6">
       <section className="rounded-xl border border-border/70 bg-card/60 p-5">
-        <h2 className="text-sm font-semibold">Mi integración de Google</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Conecta <span className="font-medium text-foreground">tu propia cuenta de Google</span> (el
-          mismo correo con el que ingresas a EditFlow). Así los eventos que te asignen se agendan en
-          TU Google Calendar y las notificaciones te llegan a tu propio correo. Cada miembro conecta
-          la suya por separado.
-        </p>
+        <h2 className="text-sm font-semibold">Integración de Google</h2>
 
-        {googleError === "email_mismatch" && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 p-3 text-xs text-danger">
+        {puedeGestionar ? (
+          <>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Conecta <span className="font-medium text-foreground">tu cuenta de Google</span> (el
+              mismo correo con el que ingresas a EditFlow). Es la cuenta desde la que se crean los
+              eventos y las reuniones con Meet, y desde la que salen las invitaciones y
+              notificaciones por correo.
+            </p>
+
+            {googleError === "email_mismatch" && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 p-3 text-xs text-danger">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  Esa cuenta de Google no es <span className="font-medium">{miCorreo}</span> — el
+                  correo con el que ingresas a EditFlow. Elige exactamente esa cuenta para conectar
+                  tu Google Calendar y Gmail.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <GoogleCalendarConnection
+                connected={Boolean(googleConnection)}
+                googleEmail={googleConnection?.google_email}
+                accountEmail={miCorreo}
+              />
+            </div>
+            {googleConnection && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                También funciona al revés: un evento creado directo en tu Google Calendar (o por
+                Siri) se importa acá solo si el título o la descripción tiene la palabra{" "}
+                <span className="font-mono text-foreground">Flow</span> — así ningún evento personal
+                se mezcla con el del equipo. Se revisa cada 10 minutos.
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <p>
-              Esa cuenta de Google no es <span className="font-medium">{miCorreo}</span> — el correo
-              con el que ingresas a EditFlow. Elige exactamente esa cuenta para conectar tu Google
-              Calendar y Gmail.
+              La integración de Google la gestiona el administrador. Tú no necesitas conectar nada:
+              las invitaciones a reuniones te llegan a tu correo automáticamente.
             </p>
           </div>
-        )}
-
-        <div className="mt-4">
-          <GoogleCalendarConnection
-            connected={Boolean(googleConnection)}
-            googleEmail={googleConnection?.google_email}
-            accountEmail={miCorreo}
-          />
-        </div>
-        {googleConnection && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            También funciona al revés: un evento creado directo en tu Google Calendar (o por Siri) se
-            importa acá solo si el título o la descripción tiene la palabra{" "}
-            <span className="font-mono text-foreground">Flow</span> — así ningún evento personal se
-            mezcla con el del equipo. Se revisa cada 10 minutos.
-          </p>
         )}
       </section>
 
