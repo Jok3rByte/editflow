@@ -10,6 +10,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization, resolveActivePeriod } from "@/lib/period/resolve";
 import { Button } from "@/components/ui/button";
+import { ImportSheet } from "@/components/dashboard/import-sheet";
 import { formatDateEs } from "@/lib/utils/dates";
 
 interface KpiCard {
@@ -39,6 +40,7 @@ const MODULOS = [
 
 export default async function DashboardPage() {
   const organization = await requireActiveOrganization();
+  const puedeGestionar = organization.role === "owner" || organization.role === "admin";
   const activePeriod = await resolveActivePeriod(organization.id);
   const supabase = await createClient();
 
@@ -90,12 +92,15 @@ export default async function DashboardPage() {
             {activePeriod ? activePeriod.label : "Sin periodo activo"}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/app/monitoreo?nuevo=1">
-            <Plus className="size-4" />
-            Nuevo video
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {puedeGestionar && <ImportSheet />}
+          <Button asChild>
+            <Link href="/app/monitoreo?nuevo=1">
+              <Plus className="size-4" />
+              Nuevo video
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
