@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   sendMagicLink,
   signInWithPasswordAction,
+  solicitarReset,
   type MagicLinkState,
   type PasswordLoginState,
 } from "@/lib/actions/auth";
@@ -60,12 +61,8 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
       toast.error("Escribe tu correo arriba y vuelve a darle a Restablecer.");
       return;
     }
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/restablecer`,
-    });
-    if (error) toast.error("No se pudo enviar el correo", { description: error.message });
-    else toast.success("Te enviamos un correo para restablecer tu contraseña.");
+    await solicitarReset(email.trim());
+    toast.success("Si tu correo está registrado, te enviamos un enlace para restablecer tu contraseña.");
   }
 
   // ----- Modo ACCESO (volver a entrar): correo + contraseña o Google. -----

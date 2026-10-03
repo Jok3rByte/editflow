@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { ingresarConInvitacion } from "@/lib/actions/invitations";
+import { solicitarReset } from "@/lib/actions/auth";
 
 export function InviteAuthForm({ token, email }: { token: string; email: string }) {
   const [password, setPassword] = useState("");
@@ -43,15 +44,8 @@ export function InviteAuthForm({ token, email }: { token: string; email: string 
   }
 
   async function handleReset() {
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/restablecer`,
-    });
-    if (error) {
-      toast.error("No se pudo enviar el correo", { description: error.message });
-    } else {
-      toast.success("Te enviamos un correo para restablecer tu contraseña.");
-    }
+    await solicitarReset(email);
+    toast.success("Si tu correo está registrado, te enviamos un enlace para restablecer tu contraseña.");
   }
 
   return (

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { appUrl } from "@/lib/supabase/env";
+import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
+import { sendPasswordResetEmail } from "@/lib/email/send-password-reset";
 import { ACCOUNT_STEP_SCHEMA } from "@/lib/validations/organization";
 
 export interface MagicLinkState {
@@ -128,4 +130,66 @@ export async function signInWithPasswordAction(
   }
 
   redirect("/app/dashboard");
+}
+
+/**
+ * Envía el correo de "restablecer contraseña" con la marca EditFlow (asunto,
+ * logo y botón propios, no la plantilla de Supabase). Genera el enlace de
+ * recuperación con la API admin y lo manda desde el Gmail del owner de la
+ * organización del usuario (o Resend). Responde ok aunque el correo no
+ * exista, para no revelar qué correos están registrados.
+ */
+export async function solicitarReset(email: string): Promise<{ ok: boolean }> {
+  const cleaned = email.trim().toLowerCase();
+  if (!cleaned) return { ok: false };
+
+  const admin = createServiceRoleClient();
+
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email: cleaned,
+    options: { redirectTo: `${appUrl()}/restablecer` },
+  });
+  const resetUrl = linkData?.properties?.action_link;
+  if (linkErr || !resetUrl) return { ok: true };
+
+  try {
+    const { data: miMembership } = await admin
+      .from("memberships")
+      .select("organization_id")
+      .eq("email", cleaned)
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+
+    let senderMembershipId: string | null = null;
+    let senderEmail: string | null = null;
+    let gmailSendAvailable = false;
+
+    if (miMembership) {
+      const { data: owner } = await admin
+        .from("memberships")
+        .select("id, email")
+        .eq("organization_id", miMembership.organization_id)
+        .eq("role", "owner")
+        .eq("active", true)
+        .maybeSingle();
+      if (owner) {
+        senderMembershipId = owner.id;
+        senderEmail = owner.email;
+        const { data: conn } = await admin
+          .from("google_oauth_tokens")
+          .select("scope")
+          .eq("membership_id", owner.id)
+          .maybeSingle();
+        gmailSendAvailable = Boolean(conn?.scope?.includes(GMAIL_SEND_SCOPE));
+      }
+    }
+
+    await sendPasswordResetEmail({ to: cleaned, resetUrl, senderMembershipId, senderEmail, gmailSendAvailable });
+  } catch (err) {
+    console.error("[solicitarReset] no se pudo enviar el correo", err);
+  }
+
+  return { ok: true };
 }

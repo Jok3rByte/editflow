@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,26 @@ import { createClient } from "@/lib/supabase/client";
 
 export function ResetPasswordForm() {
   const router = useRouter();
+  const [supabase] = useState(() => createClient());
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  // El enlace de recuperación llega con los tokens en el hash (#access_token…);
+  // los tomamos para establecer la sesión y poder cambiar la contraseña.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes("access_token")) return;
+    const p = new URLSearchParams(hash.slice(1));
+    const access_token = p.get("access_token");
+    const refresh_token = p.get("refresh_token");
+    if (access_token && refresh_token) {
+      supabase.auth
+        .setSession({ access_token, refresh_token })
+        .catch(() => {})
+        .finally(() => window.history.replaceState(null, "", window.location.pathname));
+    }
+  }, [supabase]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +42,6 @@ export function ResetPasswordForm() {
       return;
     }
     startTransition(async () => {
-      const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         toast.error("No se pudo cambiar la contraseña", {
