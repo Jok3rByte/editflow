@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2, Link2, ExternalLink, Check, Copy } from "lucide-react";
@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePickerField } from "@/components/preview/date-picker-field";
-import { playSuccessSound } from "@/lib/preview/notification-sounds";
+import { playSuccessSound, playAlertSound } from "@/lib/preview/notification-sounds";
 import { createVideo, updateVideo, deleteVideo } from "@/lib/actions/videos";
 import { formatDateEs } from "@/lib/utils/dates";
 import { gradientePorProgreso } from "@/lib/utils/progress-color";
@@ -58,6 +58,7 @@ interface VideoRow {
   priority: VideoPriority;
   progreso: number;
   progreso_inicio: string | null;
+  progreso_actualizado: string | null;
   processed_link: string | null;
   clients: { name: string } | null;
 }
@@ -360,6 +361,33 @@ export function MonitoreoClient({ periodId, periodLabel, videos, clientes, miemb
   const [nuevaEntrega, setNuevaEntrega] = useState<Date | undefined>();
 
   const [videoAEliminar, setVideoAEliminar] = useState<VideoRow | null>(null);
+
+  // Alerta de estancamiento: si un video lleva más de 1 hora en edición sin
+  // que su % avance, suena la alerta y sale un aviso. Se revisa al abrir y
+  // cada minuto. Se avisa una sola vez por "episodio" (si vuelve a avanzar y
+  // luego se estanca de nuevo, alerta otra vez).
+  const alertadosRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    function revisar() {
+      const ahora = Date.now();
+      for (const v of videos) {
+        const base = v.progreso_actualizado ?? v.progreso_inicio;
+        const minutos = base ? (ahora - new Date(base).getTime()) / 60000 : 0;
+        const estancado = v.status === "edicion" && v.progreso < 100 && base !== null && minutos >= 60;
+        if (estancado && !alertadosRef.current.has(v.id)) {
+          alertadosRef.current.add(v.id);
+          playAlertSound();
+          toast.warning(`"${v.title}" lleva más de 1 hora sin avanzar`, {
+            description: `${v.clients?.name ?? "—"} · avance ${v.progreso}%`,
+          });
+        }
+        if (!estancado) alertadosRef.current.delete(v.id);
+      }
+    }
+    revisar();
+    const t = setInterval(revisar, 60_000);
+    return () => clearInterval(t);
+  }, [videos]);
 
   function handleCrear(e: React.FormEvent) {
     e.preventDefault();
