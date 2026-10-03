@@ -37,11 +37,11 @@ export default async function InvitacionPage({
               El enlace no es válido. Pídele a quien te invitó que te envíe uno nuevo.
             </p>
           </>
-        ) : invitation.status !== "pendiente" ? (
+        ) : invitation.status === "revocada" ? (
           <>
             <h1 className="text-2xl font-semibold tracking-tight">Invitación no disponible</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Esta invitación ya fue {invitation.status === "aceptada" ? "aceptada" : "usada o expiró"}.
+              Esta invitación fue revocada. Pídele a quien te invitó que te envíe una nueva.
             </p>
           </>
         ) : (

@@ -28,27 +28,43 @@ export function RealtimeRefresher({ organizationId }: { organizationId: string }
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = createClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // Nunca dejar que un problema de Realtime (WebSocket, publicación no
+    // habilitada, etc.) tumbe la app: si falla, simplemente no hay refresco
+    // en vivo, pero la página carga igual.
+    let cleanup = () => {};
 
-    const refrescar = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => router.refresh(), 300);
-    };
+    try {
+      const supabase = createClient();
+      const refrescar = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => router.refresh(), 300);
+      };
 
-    const channel = supabase.channel(`org-${organizationId}`);
-    for (const table of TABLAS) {
-      channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table, filter: `organization_id=eq.${organizationId}` },
-        refrescar,
-      );
+      const channel = supabase.channel(`org-${organizationId}`);
+      for (const table of TABLAS) {
+        channel.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table, filter: `organization_id=eq.${organizationId}` },
+          refrescar,
+        );
+      }
+      channel.subscribe();
+
+      cleanup = () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          // sin importancia al desmontar
+        }
+      };
+    } catch (err) {
+      console.error("Realtime no disponible:", err);
     }
-    channel.subscribe();
 
     return () => {
       if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
+      cleanup();
     };
   }, [organizationId, router]);
 
