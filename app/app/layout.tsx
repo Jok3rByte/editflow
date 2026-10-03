@@ -4,6 +4,7 @@ import { listPeriods, requireActiveOrganization, resolveActivePeriod } from "@/l
 import { currentYearMonthInTimezone } from "@/lib/utils/dates";
 import { AppSidebar } from "@/components/shared/app-sidebar";
 import { RealtimeRefresher } from "@/components/app/realtime-refresher";
+import { NotificationsListener } from "@/components/app/notifications-listener";
 import { PeriodSwitcher } from "@/components/period/period-switcher";
 import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-banner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -36,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider>
       <RealtimeRefresher organizationId={organization.id} />
+      <NotificationsListener membershipId={organization.membershipId} />
       <AppSidebar organization={organization} memberName={memberName} />
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">

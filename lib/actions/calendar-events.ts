@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 import {
   createGoogleCalendarEvent,
@@ -123,6 +123,26 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
 
   // Recordatorio por correo 60 minutos antes — lo procesa el cron de reminders.
   await supabase.from("event_reminders").insert({ event_id: event.id, minutes_before: 60 });
+
+  // Notificación en vivo para la persona asignada (si no es quien crea el
+  // evento): queda registrada en notifications y el listener del front la
+  // muestra como toast en tiempo real. Se inserta con service role porque la
+  // fila es para OTRO usuario (RLS no deja insertar notificaciones ajenas).
+  if (asignado && asignado.id !== creador?.id) {
+    const { dateLabel, timeLabel } = formatDateTimeEs(input.startAt, org.timezone);
+    const tipoLabel = EVENT_TYPE_LABEL[input.type] ?? input.type;
+    const admin = createServiceRoleClient();
+    const { error: notifError } = await admin.from("notifications").insert({
+      organization_id: org.id,
+      recipient_email: asignado.email,
+      membership_id: asignado.id,
+      type: "calendar_event",
+      title: `Nuevo evento: ${input.title}`,
+      body: `${tipoLabel} · ${dateLabel} a las ${timeLabel}`,
+      link: "/app/calendario",
+    });
+    if (notifError) console.error("No se pudo crear la notificación del evento", notifError.message);
+  }
 
   if (esReunion) {
     const asistentesEquipo = dedupAsistentes([propietario, asignado]);
