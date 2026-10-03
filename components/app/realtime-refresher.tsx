@@ -33,36 +33,52 @@ export function RealtimeRefresher({ organizationId }: { organizationId: string }
     // habilitada, etc.) tumbe la app: si falla, simplemente no hay refresco
     // en vivo, pero la página carga igual.
     let cleanup = () => {};
+    let cancelado = false;
 
-    try {
-      const supabase = createClient();
-      const refrescar = () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => router.refresh(), 300);
-      };
+    (async () => {
+      try {
+        const supabase = createClient();
 
-      const channel = supabase.channel(`org-${organizationId}`);
-      for (const table of TABLAS) {
-        channel.on(
-          "postgres_changes",
-          { event: "*", schema: "public", table, filter: `organization_id=eq.${organizationId}` },
-          refrescar,
-        );
-      }
-      channel.subscribe();
-
-      cleanup = () => {
-        try {
-          supabase.removeChannel(channel);
-        } catch {
-          // sin importancia al desmontar
+        // Autenticar Realtime con el token del usuario: las tablas tienen RLS,
+        // así que sin esto el servidor no entrega los cambios (la conexión
+        // sería anónima y RLS la filtraría por completo).
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await supabase.realtime.setAuth(session.access_token);
         }
-      };
-    } catch (err) {
-      console.error("Realtime no disponible:", err);
-    }
+        if (cancelado) return;
+
+        const refrescar = () => {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => router.refresh(), 300);
+        };
+
+        const channel = supabase.channel(`org-${organizationId}`);
+        for (const table of TABLAS) {
+          channel.on(
+            "postgres_changes",
+            { event: "*", schema: "public", table, filter: `organization_id=eq.${organizationId}` },
+            refrescar,
+          );
+        }
+        channel.subscribe();
+
+        cleanup = () => {
+          try {
+            supabase.removeChannel(channel);
+          } catch {
+            // sin importancia al desmontar
+          }
+        };
+      } catch (err) {
+        console.error("Realtime no disponible:", err);
+      }
+    })();
 
     return () => {
+      cancelado = true;
       if (timer) clearTimeout(timer);
       cleanup();
     };
