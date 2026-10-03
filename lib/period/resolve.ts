@@ -36,9 +36,15 @@ export async function requireActiveOrganization(): Promise<ActiveOrganization> {
     redirect("/crear-espacio");
   }
 
+  // Filtrar por user_id es CRÍTICO: RLS deja ver todas las membresías de la
+  // organización, así que sin esto .limit(1) podía devolver la membresía de
+  // otro miembro (ej. la del owner) y un editor quedaba tratado como owner en
+  // la UI/acciones, aunque RLS (que usa auth.uid()) después bloqueara la
+  // escritura.
   const { data } = await supabase
     .from("memberships")
     .select("role, organizations(id, name, timezone, owner_email)")
+    .eq("user_id", user.id)
     .eq("active", true)
     .limit(1)
     .maybeSingle();
