@@ -5,11 +5,14 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
   Text,
 } from "@react-email/components";
+
+const LOGO_URL = "https://editflow-gules.vercel.app/logo-mark.png";
 
 export interface EventNotificationEmailProps {
   eventTitle: string;
@@ -42,6 +45,7 @@ export default function EventNotificationEmail({
       </Preview>
       <Body style={main}>
         <Container style={container}>
+          <Img src={LOGO_URL} width="32" height="32" alt="EditFlow" style={{ marginBottom: "12px" }} />
           <Text style={brand}>
             Edit<span style={{ color: "#8B5CF6" }}>Flow</span>
           </Text>

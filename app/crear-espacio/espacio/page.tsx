@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMyOrganizations } from "@/lib/actions/organizations";
@@ -19,7 +20,8 @@ const ROLE_LABELS: Record<string, string> = {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-      <Link href="/" className="mb-8 text-lg font-semibold tracking-tight">
+      <Link href="/" className="mb-8 flex items-center gap-2 text-lg font-semibold tracking-tight">
+        <Image src="/logo-mark.png" alt="" width={28} height={28} className="size-7 object-contain" />
         EditFlow
       </Link>
       <div className="w-full max-w-sm">{children}</div>

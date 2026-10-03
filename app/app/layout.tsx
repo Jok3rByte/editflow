@@ -8,6 +8,7 @@ import { PeriodSwitcher } from "@/components/period/period-switcher";
 import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-banner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 // Todo lo que cuelga de /app depende de datos que mutan por acción del
 // usuario (videos, periodos, clientes...) — nunca debe quedar estático ni
@@ -59,10 +60,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             canManage={canManagePeriods}
           />
           {activePeriod?.status === "cerrado" && (
-            <span className="ml-auto rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
               Mes cerrado — solo lectura
             </span>
           )}
+          <ThemeToggle className="ml-auto" />
         </header>
 
         {!currentMonthOpen && canManagePeriods && (
