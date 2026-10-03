@@ -42,6 +42,18 @@ export function InviteAuthForm({ token, email }: { token: string; email: string 
     });
   }
 
+  async function handleReset() {
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/restablecer`,
+    });
+    if (error) {
+      toast.error("No se pudo enviar el correo", { description: error.message });
+    } else {
+      toast.success("Te enviamos un correo para restablecer tu contraseña.");
+    }
+  }
+
   return (
     <div className="space-y-4 text-left">
       <Button type="button" variant="outline" className="w-full" onClick={handleGoogle} disabled={googleLoading}>
@@ -73,6 +85,13 @@ export function InviteAuthForm({ token, email }: { token: string; email: string 
         <Button type="submit" className="w-full" disabled={isPending}>
           {isPending ? "Entrando…" : "Entrar"}
         </Button>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+        >
+          ¿Olvidaste tu contraseña? Restablecer
+        </button>
       </form>
 
       <p className="text-xs text-muted-foreground">
