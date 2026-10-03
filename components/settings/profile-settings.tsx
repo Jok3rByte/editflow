@@ -9,8 +9,50 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { signOutAction, updateProfile } from "@/lib/actions/auth";
+
+// Países principales (LatAm + España/EE.UU.) con bandera e indicativo.
+const PAISES = [
+  { name: "Colombia", code: "+57", flag: "🇨🇴" },
+  { name: "México", code: "+52", flag: "🇲🇽" },
+  { name: "Estados Unidos", code: "+1", flag: "🇺🇸" },
+  { name: "España", code: "+34", flag: "🇪🇸" },
+  { name: "Argentina", code: "+54", flag: "🇦🇷" },
+  { name: "Perú", code: "+51", flag: "🇵🇪" },
+  { name: "Chile", code: "+56", flag: "🇨🇱" },
+  { name: "Ecuador", code: "+593", flag: "🇪🇨" },
+  { name: "Venezuela", code: "+58", flag: "🇻🇪" },
+  { name: "Guatemala", code: "+502", flag: "🇬🇹" },
+  { name: "Costa Rica", code: "+506", flag: "🇨🇷" },
+  { name: "Panamá", code: "+507", flag: "🇵🇦" },
+  { name: "Bolivia", code: "+591", flag: "🇧🇴" },
+  { name: "Uruguay", code: "+598", flag: "🇺🇾" },
+  { name: "Paraguay", code: "+595", flag: "🇵🇾" },
+  { name: "Rep. Dominicana", code: "+1809", flag: "🇩🇴" },
+  { name: "El Salvador", code: "+503", flag: "🇸🇻" },
+  { name: "Honduras", code: "+504", flag: "🇭🇳" },
+  { name: "Nicaragua", code: "+505", flag: "🇳🇮" },
+];
+
+function paisPorNombre(nombre: string) {
+  return PAISES.find((p) => p.name === nombre) ?? PAISES[0];
+}
+
+function parsePhone(phone: string | null): { pais: string; numero: string } {
+  if (!phone) return { pais: "Colombia", numero: "" };
+  const porLargo = [...PAISES].sort((a, b) => b.code.length - a.code.length);
+  const m = porLargo.find((p) => phone.startsWith(p.code));
+  if (m) return { pais: m.name, numero: phone.slice(m.code.length).trim() };
+  return { pais: "Colombia", numero: phone };
+}
 
 function initials(name: string) {
   return name
@@ -38,8 +80,10 @@ export function ProfileSettings({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const telParsed = parsePhone(phone);
   const [nombre, setNombre] = useState(fullName);
-  const [telefono, setTelefono] = useState(phone ?? "");
+  const [paisTel, setPaisTel] = useState(telParsed.pais);
+  const [numeroTel, setNumeroTel] = useState(telParsed.numero);
   const [biografia, setBiografia] = useState(bio ?? "");
   const [foto, setFoto] = useState<string | null>(avatarUrl);
   const [subiendo, setSubiendo] = useState(false);
@@ -77,12 +121,14 @@ export function ProfileSettings({
       toast.error("El nombre es obligatorio.");
       return;
     }
+    const numeroLimpio = numeroTel.trim();
+    const telefonoFinal = numeroLimpio ? `${paisPorNombre(paisTel).code} ${numeroLimpio}` : null;
     startTransition(async () => {
       const result = await updateProfile({
         fullName: nombre,
         avatarUrl: foto,
         bio: biografia,
-        phone: telefono,
+        phone: telefonoFinal,
       });
       if (result.ok) {
         toast.success("Perfil actualizado");
@@ -130,13 +176,37 @@ export function ProfileSettings({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="perfil-telefono">Teléfono</Label>
-          <Input
-            id="perfil-telefono"
-            value={telefono}
-            onChange={(e) => setTelefono(e.target.value)}
-            placeholder="+57 300 000 0000"
-            type="tel"
-          />
+          <div className="flex gap-2">
+            <Select value={paisTel} onValueChange={setPaisTel}>
+              <SelectTrigger className="w-28 shrink-0">
+                <SelectValue>
+                  <span className="flex items-center gap-1">
+                    <span>{paisPorNombre(paisTel).flag}</span>
+                    <span className="text-xs">{paisPorNombre(paisTel).code}</span>
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {PAISES.map((p) => (
+                  <SelectItem key={p.name} value={p.name}>
+                    <span className="flex items-center gap-2">
+                      <span>{p.flag}</span>
+                      <span>{p.name}</span>
+                      <span className="text-xs text-muted-foreground">{p.code}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              id="perfil-telefono"
+              value={numeroTel}
+              onChange={(e) => setNumeroTel(e.target.value)}
+              placeholder="300 000 0000"
+              type="tel"
+              inputMode="tel"
+            />
+          </div>
         </div>
       </div>
 

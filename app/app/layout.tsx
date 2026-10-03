@@ -51,7 +51,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <SidebarProvider>
       <RealtimeRefresher organizationId={organization.id} />
       <AppSidebar
-        organization={organization}
         memberName={memberName}
         avatarUrl={perfil?.avatar_url ?? null}
         membershipId={organization.membershipId}
