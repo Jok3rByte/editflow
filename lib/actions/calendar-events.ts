@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
-import { createGoogleCalendarEvent, deleteGoogleCalendarEvent } from "@/lib/google/calendar";
+import {
+  createGoogleCalendarEvent,
+  createGoogleMeetingEvent,
+  deleteGoogleCalendarEvent,
+} from "@/lib/google/calendar";
 import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
 import { sendEventNotificationEmail } from "@/lib/email/send-event-notification";
 import { EVENT_TYPE_LABEL } from "@/lib/utils/event-type-label";
@@ -19,6 +23,12 @@ export interface CreateCalendarEventInput {
   videoId?: string;
   color?: string;
   assignedMembershipId?: string;
+  /** Correos invitados a la reunión (equipo o externos). Si hay alguno, el
+   *  evento se trata como reunión: un solo evento en el calendario del
+   *  creador, con todos como invitados, y Google les manda la invitación. */
+  guestEmails?: string[];
+  /** Si true, se agrega un enlace de Google Meet al evento. */
+  withMeet?: boolean;
 }
 
 function formatDateTimeEs(iso: string, timezone: string) {
@@ -38,16 +48,43 @@ function formatDateTimeEs(iso: string, timezone: string) {
   return { dateLabel, timeLabel };
 }
 
+interface Miembro {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  notify_calendar: boolean;
+}
+
+function dedupAsistentes(lista: (Miembro | undefined)[]): Miembro[] {
+  return lista.filter(
+    (m, i, arr): m is Miembro => Boolean(m) && arr.findIndex((x) => x?.email === m?.email) === i,
+  );
+}
+
+function normalizarInvitados(guestEmails?: string[]): string[] {
+  return Array.from(
+    new Set((guestEmails ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  );
+}
+
 /**
- * Crea el evento en EditFlow, lo replica en el Google Calendar conectado
- * (si hay uno) y avisa por correo: el propietario recibe todos los
- * eventos, y la persona asignada solo recibe el suyo. El correo sale
- * literalmente de la bandeja de envío de Gmail del propietario (el mismo
- * correo con el que se registró) si conectó ese scope; si no, cae a Resend.
+ * Crea el evento en EditFlow y lo sincroniza con Google de una de dos formas:
+ *
+ * - REUNIÓN (tiene invitados y/o Meet): un solo evento en el calendario del
+ *   creador con todos los correos como invitados y, si se pidió, un enlace de
+ *   Google Meet. Google le manda la invitación a cada correo (sirve para
+ *   gente externa; no necesitan conectar nada).
+ * - EVENTO NORMAL (sin invitados): se escribe una copia en el calendario
+ *   propio de cada miembro asistente conectado, y se avisa por correo.
  */
 export async function createCalendarEvent(input: CreateCalendarEventInput) {
   const org = await requireActiveOrganization();
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: event, error: insertError } = await supabase
     .from("calendar_events")
@@ -69,27 +106,73 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     throw new Error(insertError?.message ?? "No se pudo crear el evento.");
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { data: miembros } = await supabase
     .from("memberships")
     .select("id, email, full_name, role, notify_calendar")
     .eq("organization_id", org.id)
     .eq("active", true);
 
-  const propietario = miembros?.find((m) => m.role === "owner");
+  const propietario = (miembros as Miembro[] | null)?.find((m) => m.role === "owner");
   const asignado = input.assignedMembershipId
-    ? miembros?.find((m) => m.id === input.assignedMembershipId)
+    ? (miembros as Miembro[] | null)?.find((m) => m.id === input.assignedMembershipId)
     : undefined;
-  const creador = miembros?.find((m) => m.email === user?.email);
+  const creador = (miembros as Miembro[] | null)?.find((m) => m.email === user?.email);
 
-  // event_attendees: el propietario siempre (para ver "todos los eventos"),
-  // más la persona asignada si es distinta.
-  const asistentes = [propietario, asignado].filter(
-    (m, i, arr): m is NonNullable<typeof m> => Boolean(m) && arr.findIndex((x) => x?.email === m?.email) === i,
-  );
+  const invitados = normalizarInvitados(input.guestEmails);
+  const esReunion = invitados.length > 0 || Boolean(input.withMeet);
+
+  // Recordatorio por correo 60 minutos antes — lo procesa el cron de reminders.
+  await supabase.from("event_reminders").insert({ event_id: event.id, minutes_before: 60 });
+
+  if (esReunion) {
+    const asistentesEquipo = dedupAsistentes([propietario, asignado]);
+    // Guarda asistentes del equipo (con membership) y los invitados externos
+    // (sin membership) para poder mostrarlos y editarlos después.
+    const emailsEquipo = new Set(asistentesEquipo.map((m) => m.email.toLowerCase()));
+    const filas = [
+      ...asistentesEquipo.map((m) => ({ event_id: event.id, membership_id: m.id, email: m.email, notify: false })),
+      ...invitados
+        .filter((e) => !emailsEquipo.has(e))
+        .map((e) => ({ event_id: event.id, email: e, notify: false })),
+    ];
+    if (filas.length > 0) {
+      await supabase.from("event_attendees").insert(filas);
+    }
+
+    if (creador) {
+      const invitacion = Array.from(
+        new Set([...asistentesEquipo.map((m) => m.email.toLowerCase()), ...invitados]),
+      ).filter((e) => e !== creador.email.toLowerCase());
+
+      const meeting = await createGoogleMeetingEvent(creador.id, {
+        title: input.title,
+        description: input.description,
+        startAt: input.startAt,
+        endAt: input.endAt,
+        timeZone: org.timezone,
+        attendeeEmails: invitacion,
+        withMeet: Boolean(input.withMeet),
+      });
+
+      if (meeting) {
+        await supabase
+          .from("calendar_events")
+          .update({
+            google_event_id: meeting.googleEventId,
+            google_html_link: meeting.htmlLink,
+            meeting_url: meeting.meetLink,
+            google_organizer_membership_id: creador.id,
+          })
+          .eq("id", event.id);
+      }
+    }
+
+    revalidatePath("/app/calendario");
+    return { id: event.id };
+  }
+
+  // ----- Evento normal: espejo por-miembro + correos de aviso -----
+  const asistentes = dedupAsistentes([propietario, asignado]);
 
   if (asistentes.length > 0) {
     await supabase.from("event_attendees").insert(
@@ -102,13 +185,6 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     );
   }
 
-  // Recordatorio por correo 60 minutos antes del evento — lo procesa el
-  // cron de /api/cron/reminders (ver lib/notifications/reminders.ts).
-  await supabase.from("event_reminders").insert({ event_id: event.id, minutes_before: 60 });
-
-  // Google Calendar: se crea una copia en el calendario PROPIO de cada
-  // asistente que haya conectado su Google, con su propio token. Quien no lo
-  // haya conectado simplemente no recibe la copia (pero sí el correo).
   const googleEvent = {
     title: input.title,
     description: input.description,
@@ -131,8 +207,6 @@ export async function createCalendarEvent(input: CreateCalendarEventInput) {
     }),
   );
 
-  // Correos de aviso: salen desde el Gmail del que crea el evento (owner o
-  // admin) si conectó ese scope, con Resend como respaldo.
   if (creador) {
     const { data: creatorConn } = await supabase
       .from("google_oauth_tokens")
@@ -181,9 +255,9 @@ export interface UpdateCalendarEventInput extends CreateCalendarEventInput {
 }
 
 /**
- * Actualiza el evento y, si ya tenía un espejo en Google Calendar, lo
- * actualiza también. No reenvía el correo de aviso (solo al crear) para no
- * saturar la bandeja del propietario con un correo por cada ajuste menor.
+ * Actualiza el evento. Borra los espejos/reunión viejos de Google y los
+ * recrea según el nuevo estado (reunión o evento normal). No reenvía el
+ * correo de aviso de los eventos normales (solo al crear).
  */
 export async function updateCalendarEvent(input: UpdateCalendarEventInput): Promise<CalendarActionResult> {
   const org = await requireActiveOrganization();
@@ -195,7 +269,7 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
 
   const { data: existing } = await supabase
     .from("calendar_events")
-    .select("id")
+    .select("id, google_event_id, google_organizer_membership_id")
     .eq("id", input.id)
     .eq("organization_id", org.id)
     .maybeSingle();
@@ -204,8 +278,7 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
     return { ok: false, error: "El evento no existe." };
   }
 
-  // Espejos viejos en Google (uno por asistente, en su propio calendario):
-  // se capturan antes de reemplazar los asistentes para poder borrarlos.
+  // Espejos por-miembro viejos (uno por asistente en su propio calendario).
   const { data: espejosViejos } = await supabase
     .from("event_attendees")
     .select("membership_id, google_event_id")
@@ -222,6 +295,11 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
       start_at: input.startAt,
       end_at: input.endAt,
       color: input.color,
+      // se recalculan abajo según el nuevo estado
+      google_event_id: null,
+      google_html_link: null,
+      meeting_url: null,
+      google_organizer_membership_id: null,
     })
     .eq("id", input.id);
 
@@ -235,15 +313,25 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
     .eq("organization_id", org.id)
     .eq("active", true);
 
-  const propietario = miembros?.find((m) => m.role === "owner");
-  const asignado = input.assignedMembershipId
-    ? miembros?.find((m) => m.id === input.assignedMembershipId)
-    : undefined;
-  const asistentes = [propietario, asignado].filter(
-    (m, i, arr): m is NonNullable<typeof m> => Boolean(m) && arr.findIndex((x) => x?.email === m?.email) === i,
-  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Borra los espejos viejos del calendario de cada quien antes de recrearlos.
+  const propietario = (miembros as Miembro[] | null)?.find((m) => m.role === "owner");
+  const asignado = input.assignedMembershipId
+    ? (miembros as Miembro[] | null)?.find((m) => m.id === input.assignedMembershipId)
+    : undefined;
+  const creador = (miembros as Miembro[] | null)?.find((m) => m.email === user?.email);
+
+  // Borra la reunión vieja de Google (si la había) notificando la cancelación.
+  if (existing.google_event_id && existing.google_organizer_membership_id) {
+    await deleteGoogleCalendarEvent(
+      existing.google_organizer_membership_id,
+      existing.google_event_id,
+      true,
+    );
+  }
+  // Borra los espejos por-miembro viejos del calendario de cada quien.
   await Promise.all(
     (espejosViejos ?? [])
       .filter((a): a is { membership_id: string; google_event_id: string } =>
@@ -252,12 +340,65 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
       .map((a) => deleteGoogleCalendarEvent(a.membership_id, a.google_event_id)),
   );
 
-  // Reemplaza los asistentes en vez de diffear: cada evento solo tiene
-  // propietario + un asignado como mucho, no vale la pena el diff.
+  const invitados = normalizarInvitados(input.guestEmails);
+  const esReunion = invitados.length > 0 || Boolean(input.withMeet);
+  const asistentesEquipo = dedupAsistentes([propietario, asignado]);
+
+  // Reemplaza los asistentes.
   await supabase.from("event_attendees").delete().eq("event_id", input.id);
-  if (asistentes.length > 0) {
+
+  // Reemplaza el recordatorio pendiente a la nueva hora.
+  await supabase.from("event_reminders").delete().eq("event_id", input.id);
+  await supabase.from("event_reminders").insert({ event_id: input.id, minutes_before: 60 });
+
+  if (esReunion) {
+    const emailsEquipo = new Set(asistentesEquipo.map((m) => m.email.toLowerCase()));
+    const filas = [
+      ...asistentesEquipo.map((m) => ({ event_id: input.id, membership_id: m.id, email: m.email, notify: false })),
+      ...invitados
+        .filter((e) => !emailsEquipo.has(e))
+        .map((e) => ({ event_id: input.id, email: e, notify: false })),
+    ];
+    if (filas.length > 0) {
+      await supabase.from("event_attendees").insert(filas);
+    }
+
+    if (creador) {
+      const invitacion = Array.from(
+        new Set([...asistentesEquipo.map((m) => m.email.toLowerCase()), ...invitados]),
+      ).filter((e) => e !== creador.email.toLowerCase());
+
+      const meeting = await createGoogleMeetingEvent(creador.id, {
+        title: input.title,
+        description: input.description,
+        startAt: input.startAt,
+        endAt: input.endAt,
+        timeZone: org.timezone,
+        attendeeEmails: invitacion,
+        withMeet: Boolean(input.withMeet),
+      });
+
+      if (meeting) {
+        await supabase
+          .from("calendar_events")
+          .update({
+            google_event_id: meeting.googleEventId,
+            google_html_link: meeting.htmlLink,
+            meeting_url: meeting.meetLink,
+            google_organizer_membership_id: creador.id,
+          })
+          .eq("id", input.id);
+      }
+    }
+
+    revalidatePath("/app/calendario");
+    return { ok: true };
+  }
+
+  // ----- Evento normal: espejo por-miembro -----
+  if (asistentesEquipo.length > 0) {
     await supabase.from("event_attendees").insert(
-      asistentes.map((m) => ({
+      asistentesEquipo.map((m) => ({
         event_id: input.id,
         membership_id: m.id,
         email: m.email,
@@ -266,13 +407,6 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
     );
   }
 
-  // Reemplaza el recordatorio pendiente: si la hora del evento cambió, que
-  // vuelva a avisar 60 minutos antes de la nueva hora en vez de quedarse
-  // con el sent_at/horario viejo.
-  await supabase.from("event_reminders").delete().eq("event_id", input.id);
-  await supabase.from("event_reminders").insert({ event_id: input.id, minutes_before: 60 });
-
-  // Recrea el espejo en el calendario propio de cada asistente conectado.
   const googleEvent = {
     title: input.title,
     description: input.description,
@@ -281,7 +415,7 @@ export async function updateCalendarEvent(input: UpdateCalendarEventInput): Prom
     timeZone: org.timezone,
   };
   await Promise.all(
-    asistentes.map(async (m) => {
+    asistentesEquipo.map(async (m) => {
       const r = await createGoogleCalendarEvent(m.id, googleEvent);
       if (r) {
         await supabase
@@ -307,7 +441,7 @@ export async function deleteCalendarEvent(eventId: string): Promise<CalendarActi
 
   const { data: existing } = await supabase
     .from("calendar_events")
-    .select("id")
+    .select("id, google_event_id, google_organizer_membership_id")
     .eq("id", eventId)
     .eq("organization_id", org.id)
     .maybeSingle();
@@ -316,7 +450,7 @@ export async function deleteCalendarEvent(eventId: string): Promise<CalendarActi
     return { ok: false, error: "El evento no existe." };
   }
 
-  // Espejos en los calendarios de los asistentes, para borrarlos de cada uno.
+  // Espejos por-miembro, para borrarlos del calendario de cada uno.
   const { data: espejos } = await supabase
     .from("event_attendees")
     .select("membership_id, google_event_id")
@@ -327,6 +461,14 @@ export async function deleteCalendarEvent(eventId: string): Promise<CalendarActi
     return { ok: false, error: error.message };
   }
 
+  // Reunión (un evento en el calendario del organizador): avisar cancelación.
+  if (existing.google_event_id && existing.google_organizer_membership_id) {
+    await deleteGoogleCalendarEvent(
+      existing.google_organizer_membership_id,
+      existing.google_event_id,
+      true,
+    );
+  }
   await Promise.all(
     (espejos ?? [])
       .filter((a): a is { membership_id: string; google_event_id: string } =>

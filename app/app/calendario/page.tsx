@@ -32,17 +32,33 @@ export default async function CalendarioPage() {
   // Solo los eventos reales tienen fila en event_attendees (los virtuales
   // "delivery-*" se sintetizan desde videos y no existen en calendar_events).
   const eventIds = (eventos ?? []).filter((e) => !e.is_virtual).map((e) => e.id);
-  const { data: attendeeRows } = eventIds.length
-    ? await supabase.from("event_attendees").select("event_id, membership_id").in("event_id", eventIds)
-    : { data: [] as { event_id: string; membership_id: string | null }[] };
+  const [{ data: attendeeRows }, { data: meetingRows }] = eventIds.length
+    ? await Promise.all([
+        supabase.from("event_attendees").select("event_id, membership_id, email").in("event_id", eventIds),
+        supabase.from("calendar_events").select("id, meeting_url").in("id", eventIds),
+      ])
+    : [
+        { data: [] as { event_id: string; membership_id: string | null; email: string }[] },
+        { data: [] as { id: string; meeting_url: string | null }[] },
+      ];
 
   // El "responsable" visible es el asistente que no es el propietario (el
   // propietario siempre queda como asistente para recibir todos los avisos).
+  // Los asistentes sin membership_id son invitados externos (correos sueltos).
   const asignadoPorEvento: Record<string, string> = {};
+  const invitadosPorEvento: Record<string, string[]> = {};
   for (const row of attendeeRows ?? []) {
     if (row.membership_id && row.membership_id !== ownerMembership?.id) {
       asignadoPorEvento[row.event_id] = row.membership_id;
     }
+    if (!row.membership_id && row.email) {
+      invitadosPorEvento[row.event_id] = [...(invitadosPorEvento[row.event_id] ?? []), row.email];
+    }
+  }
+
+  const conMeetPorEvento: Record<string, boolean> = {};
+  for (const row of meetingRows ?? []) {
+    if (row.meeting_url) conMeetPorEvento[row.id] = true;
   }
 
   return (
@@ -55,6 +71,8 @@ export default async function CalendarioPage() {
       eventos={eventos ?? []}
       miembros={miembros ?? []}
       asignadoPorEvento={asignadoPorEvento}
+      invitadosPorEvento={invitadosPorEvento}
+      conMeetPorEvento={conMeetPorEvento}
       googleConectado={Boolean(googleConnection)}
       puedeEditar={puedeEditar}
     />

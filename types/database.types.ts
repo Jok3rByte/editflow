@@ -253,6 +253,7 @@ export interface Database {
           created_by: string | null;
           google_event_id: string | null;
           google_html_link: string | null;
+          google_organizer_membership_id: string | null;
           created_at: string;
           updated_at: string;
         };

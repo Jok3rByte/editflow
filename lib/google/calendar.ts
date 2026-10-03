@@ -126,15 +126,81 @@ export async function createGoogleCalendarEvent(
   return { googleEventId: data.id, htmlLink: data.htmlLink };
 }
 
-/** Borra el espejo en el Google Calendar propio del miembro. Silencioso si no hay conexión. */
+export interface GoogleMeetingInput extends GoogleCalendarEventInput {
+  /** Correos invitados a la reunión (equipo o externos). */
+  attendeeEmails: string[];
+  /** Si true, se pide a Google un enlace de Google Meet para el evento. */
+  withMeet: boolean;
+}
+
+export interface GoogleMeetingResult extends GoogleCalendarEventResult {
+  /** URL del Google Meet, si se pidió y Google lo creó. */
+  meetLink: string | null;
+}
+
+/**
+ * Crea UNA reunión en el calendario del organizador (el creador) con todos
+ * los invitados como asistentes y, si se pide, un enlace de Google Meet.
+ * Con sendUpdates=all, Google le manda la invitación por correo a cada
+ * asistente automáticamente — igual que crear el evento desde Google
+ * Calendar. Devuelve también el hangoutLink (el enlace de Meet).
+ */
+export async function createGoogleMeetingEvent(
+  organizerMembershipId: string,
+  event: GoogleMeetingInput,
+): Promise<GoogleMeetingResult | null> {
+  const accessToken = await getValidAccessToken(organizerMembershipId);
+  if (!accessToken) return null;
+
+  const body: Record<string, unknown> = {
+    summary: event.title,
+    description: event.description,
+    start: { dateTime: event.startAt, timeZone: event.timeZone },
+    end: { dateTime: event.endAt, timeZone: event.timeZone },
+    attendees: event.attendeeEmails.map((email) => ({ email })),
+  };
+  if (event.withMeet) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  }
+
+  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}?sendUpdates=all&conferenceDataVersion=1`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    console.error("Google Meet event error", res.status, await res.text());
+    return null;
+  }
+
+  const data = await res.json();
+  return { googleEventId: data.id, htmlLink: data.htmlLink, meetLink: data.hangoutLink ?? null };
+}
+
+/**
+ * Borra un evento del Google Calendar del miembro. Silencioso si no hay
+ * conexión. Con notifyAttendees=true (para reuniones con invitados) Google
+ * manda el aviso de cancelación a cada asistente.
+ */
 export async function deleteGoogleCalendarEvent(
   membershipId: string,
   googleEventId: string,
+  notifyAttendees = false,
 ): Promise<void> {
   const accessToken = await getValidAccessToken(membershipId);
   if (!accessToken) return;
 
-  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}/${googleEventId}`, {
+  const query = notifyAttendees ? "?sendUpdates=all" : "";
+  const res = await fetch(`${GOOGLE_CALENDAR_EVENTS_URL}/${googleEventId}${query}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });

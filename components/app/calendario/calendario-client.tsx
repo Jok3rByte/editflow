@@ -15,11 +15,14 @@ import {
   Radio,
   Truck,
   Users,
+  Video,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
@@ -72,6 +75,8 @@ interface CalendarioClientProps {
   eventos: EventoFull[];
   miembros: Miembro[];
   asignadoPorEvento: Record<string, string>;
+  invitadosPorEvento: Record<string, string[]>;
+  conMeetPorEvento: Record<string, boolean>;
   googleConectado: boolean;
   puedeEditar: boolean;
 }
@@ -191,6 +196,79 @@ interface FormState {
   asignadoId: string;
   dia: number;
   hora: string;
+  invitados: string[];
+  conMeet: boolean;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function InvitadosField({
+  invitados,
+  setInvitados,
+  disabled,
+}: {
+  invitados: string[];
+  setInvitados: (lista: string[]) => void;
+  disabled?: boolean;
+}) {
+  const [borrador, setBorrador] = useState("");
+
+  function agregar() {
+    const email = borrador.trim().toLowerCase();
+    if (!email) return;
+    if (!EMAIL_RE.test(email)) {
+      toast.error("Correo inválido");
+      return;
+    }
+    if (!invitados.includes(email)) setInvitados([...invitados, email]);
+    setBorrador("");
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label>Invitados (correos)</Label>
+      <div className="flex gap-2">
+        <Input
+          type="email"
+          placeholder="persona@correo.com"
+          value={borrador}
+          disabled={disabled}
+          onChange={(e) => setBorrador(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              agregar();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={agregar} disabled={disabled}>
+          Agregar
+        </Button>
+      </div>
+      {invitados.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {invitados.map((email) => (
+            <Badge key={email} variant="secondary" className="gap-1">
+              {email}
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => setInvitados(invitados.filter((x) => x !== email))}
+                  className="text-muted-foreground hover:text-danger"
+                  title="Quitar"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </Badge>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Si agregas invitados, Google les manda la invitación a su correo (sirve para gente externa).
+      </p>
+    </div>
+  );
 }
 
 function EventoCamposForm({
@@ -283,6 +361,27 @@ function EventoCamposForm({
           />
         </div>
       </div>
+
+      <InvitadosField
+        invitados={state.invitados}
+        setInvitados={(invitados) => setState({ ...state, invitados })}
+        disabled={disabled}
+      />
+
+      <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+        <div className="flex items-center gap-2">
+          <Video className="size-4 text-primary" />
+          <div>
+            <Label className="text-sm">Enlace de Google Meet</Label>
+            <p className="text-xs text-muted-foreground">Se crea automáticamente y va en la invitación.</p>
+          </div>
+        </div>
+        <Switch
+          checked={state.conMeet}
+          onCheckedChange={(conMeet) => setState({ ...state, conMeet })}
+          disabled={disabled}
+        />
+      </div>
     </>
   );
 }
@@ -296,6 +395,8 @@ export function CalendarioClient({
   eventos,
   miembros,
   asignadoPorEvento,
+  invitadosPorEvento,
+  conMeetPorEvento,
   googleConectado,
   puedeEditar,
 }: CalendarioClientProps) {
@@ -314,6 +415,8 @@ export function CalendarioClient({
     asignadoId: responsables[0]?.id ?? "",
     dia: 1,
     hora: "10:00",
+    invitados: [],
+    conMeet: false,
   });
 
   const [detalleOpen, setDetalleOpen] = useState(false);
@@ -324,6 +427,8 @@ export function CalendarioClient({
     asignadoId: "",
     dia: 1,
     hora: "10:00",
+    invitados: [],
+    conMeet: false,
   });
 
   const diasEnMes = new Date(year, month, 0).getDate();
@@ -338,7 +443,15 @@ export function CalendarioClient({
 
   function abrirNuevoEvento(dia: number) {
     if (!puedeEditar || !periodId) return;
-    setNuevoState({ titulo: "", tipo: "reunion", asignadoId: responsables[0]?.id ?? "", dia, hora: "10:00" });
+    setNuevoState({
+      titulo: "",
+      tipo: "reunion",
+      asignadoId: responsables[0]?.id ?? "",
+      dia,
+      hora: "10:00",
+      invitados: [],
+      conMeet: false,
+    });
     setNuevoOpen(true);
   }
 
@@ -352,6 +465,8 @@ export function CalendarioClient({
       asignadoId: asignadoPorEvento[evento.id] ?? "",
       dia: day,
       hora: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+      invitados: invitadosPorEvento[evento.id] ?? [],
+      conMeet: conMeetPorEvento[evento.id] ?? false,
     });
     setDetalleOpen(true);
   }
@@ -371,6 +486,8 @@ export function CalendarioClient({
           startAt,
           endAt,
           assignedMembershipId: nuevoState.asignadoId || undefined,
+          guestEmails: nuevoState.invitados,
+          withMeet: nuevoState.conMeet,
         });
         toast.success(`Evento creado para el ${nuevoState.dia}/${month}`);
         setNuevoOpen(false);
@@ -397,6 +514,8 @@ export function CalendarioClient({
         startAt,
         endAt,
         assignedMembershipId: detalleState.asignadoId || undefined,
+        guestEmails: detalleState.invitados,
+        withMeet: detalleState.conMeet,
       });
       if (result.ok) {
         toast.success("Evento actualizado");
