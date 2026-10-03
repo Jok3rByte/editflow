@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -65,6 +65,205 @@ interface Miembro {
   role: MemberRole;
 }
 
+type VideoStatus = "pendiente" | "edicion" | "en_revision" | "aprobado" | "entregado" | "cancelado";
+
+interface VideoEnVivo {
+  id: string;
+  seq: number;
+  title: string;
+  status: VideoStatus;
+  progreso: number;
+  progreso_inicio: string | null;
+  edicion_segundos: number | null;
+  editor_id: string | null;
+  due_date: string | null;
+  clientName: string;
+}
+
+const ESTADO_VIVO: Record<VideoStatus, { label: string; className: string }> = {
+  pendiente: { label: "Pendiente", className: "text-muted-foreground" },
+  edicion: { label: "Edición", className: "text-info" },
+  en_revision: { label: "En revisión", className: "text-warning" },
+  aprobado: { label: "Aprobado", className: "text-success" },
+  entregado: { label: "Entregado", className: "text-primary" },
+  cancelado: { label: "Cancelado", className: "text-danger" },
+};
+
+// Formatea una duración en segundos como "2d 3h 15m", "3h 15m 20s", etc.
+function formatearDuracion(segundos: number): string {
+  if (segundos < 0) segundos = 0;
+  const d = Math.floor(segundos / 86400);
+  const h = Math.floor((segundos % 86400) / 3600);
+  const m = Math.floor((segundos % 3600) / 60);
+  const s = segundos % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/**
+ * Sección en vivo: cómo va cada editor este mes (en edición, pendientes,
+ * revisión, entregados) y cuánto duró —o lleva— la edición de cada video.
+ * El cronómetro corre en pantalla para los videos en edición; para los que
+ * ya pasaron a revisión muestra la duración final medida por la base.
+ */
+function SeccionEnVivo({
+  videos,
+  miembros,
+  periodLabel,
+}: {
+  videos: VideoEnVivo[];
+  miembros: Miembro[];
+  periodLabel: string | null;
+}) {
+  // Tic cada segundo para que el tiempo de los videos en edición avance solo.
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const hayEnEdicion = videos.some((v) => v.status === "edicion" && v.progreso_inicio);
+    if (!hayEnEdicion) return;
+    const t = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [videos]);
+
+  const nombrePorId = new Map(miembros.map((m) => [m.id, m.full_name || m.email]));
+
+  function duracionVideo(v: VideoEnVivo): { texto: string; enCurso: boolean } | null {
+    if (v.status === "edicion" && v.progreso_inicio) {
+      const seg = Math.floor((ahora - new Date(v.progreso_inicio).getTime()) / 1000);
+      return { texto: formatearDuracion(seg), enCurso: true };
+    }
+    if (v.edicion_segundos != null) {
+      return { texto: formatearDuracion(v.edicion_segundos), enCurso: false };
+    }
+    return null;
+  }
+
+  // Resumen por editor.
+  const porEditor = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { editor: string; edicion: number; pendientes: number; revision: number; entregados: number; durs: number[] }
+    >();
+    for (const v of videos) {
+      const key = v.editor_id ?? "sin";
+      const nombre = v.editor_id ? nombrePorId.get(v.editor_id) ?? "—" : "Sin asignar";
+      const r = mapa.get(key) ?? {
+        editor: nombre,
+        edicion: 0,
+        pendientes: 0,
+        revision: 0,
+        entregados: 0,
+        durs: [],
+      };
+      if (v.status === "edicion") r.edicion += 1;
+      else if (v.status === "pendiente") r.pendientes += 1;
+      else if (v.status === "en_revision") r.revision += 1;
+      else if (v.status === "aprobado" || v.status === "entregado") r.entregados += 1;
+      if (v.edicion_segundos != null) r.durs.push(v.edicion_segundos);
+      mapa.set(key, r);
+    }
+    return [...mapa.values()].map((r) => ({
+      ...r,
+      promedio: r.durs.length ? Math.round(r.durs.reduce((a, b) => a + b, 0) / r.durs.length) : null,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videos]);
+
+  if (videos.length === 0) {
+    return (
+      <div className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground">
+        No hay videos este mes todavía. En cuanto el equipo registre y edite videos, verás aquí su
+        avance en tiempo real.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="relative flex size-2 items-center justify-center">
+          <span className="absolute inline-flex size-2 animate-ping rounded-full bg-success/60" />
+          <span className="relative size-2 rounded-full bg-success" />
+        </span>
+        <h2 className="text-sm font-semibold">En vivo — {periodLabel ?? "sin periodo"}</h2>
+      </div>
+
+      {/* Resumen por editor */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {porEditor.map((e) => (
+          <div key={e.editor} className="rounded-xl border bg-card p-4">
+            <p className="truncate text-sm font-medium">{e.editor}</p>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                En edición: <span className="font-semibold text-info">{e.edicion}</span>
+              </span>
+              <span>
+                Pendientes: <span className="font-semibold text-foreground">{e.pendientes}</span>
+              </span>
+              <span>
+                En revisión: <span className="font-semibold text-warning">{e.revision}</span>
+              </span>
+              <span>
+                Entregados: <span className="font-semibold text-success">{e.entregados}</span>
+              </span>
+            </div>
+            {e.promedio != null && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tiempo promedio de edición:{" "}
+                <span className="font-semibold text-foreground">{formatearDuracion(e.promedio)}</span>
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Tabla de videos en vivo */}
+      <div className="overflow-auto rounded-xl border bg-card">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-3 py-2.5">Cliente</th>
+              <th className="px-3 py-2.5">Video</th>
+              <th className="px-3 py-2.5">Editor</th>
+              <th className="px-3 py-2.5">Estado</th>
+              <th className="px-3 py-2.5">Avance</th>
+              <th className="px-3 py-2.5">Tiempo de edición</th>
+            </tr>
+          </thead>
+          <tbody>
+            {videos.map((v) => {
+              const estilo = ESTADO_VIVO[v.status];
+              const dur = duracionVideo(v);
+              return (
+                <tr key={v.id} className="border-b last:border-b-0">
+                  <td className="max-w-40 truncate px-3 py-2">{v.clientName}</td>
+                  <td className="max-w-52 truncate px-3 py-2">{v.title}</td>
+                  <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
+                    {v.editor_id ? nombrePorId.get(v.editor_id) ?? "—" : "Sin asignar"}
+                  </td>
+                  <td className={`px-3 py-2 ${estilo.className}`}>{estilo.label}</td>
+                  <td className="px-3 py-2 font-mono text-xs tabular-nums">{v.progreso}%</td>
+                  <td className="px-3 py-2 font-mono text-xs tabular-nums">
+                    {dur ? (
+                      <span className={dur.enCurso ? "text-info" : "text-foreground"}>
+                        {dur.texto}
+                        {dur.enCurso && " ⏱"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function avatarColor(seed: string) {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
@@ -90,11 +289,15 @@ export function MetricasClient({
   editorSeries,
   clientes,
   miembros,
+  videosEnVivo,
+  periodLabel,
 }: {
   clientSeries: ClientMonthRow[];
   editorSeries: EditorMonthRow[];
   clientes: ClienteOpcion[];
   miembros: Miembro[];
+  videosEnVivo: VideoEnVivo[];
+  periodLabel: string | null;
 }) {
   const [filtroCliente, setFiltroCliente] = useState(TODOS);
   const [filtroEditor, setFiltroEditor] = useState(TODOS);
@@ -183,6 +386,8 @@ export function MetricasClient({
           Exportar CSV
         </Button>
       </div>
+
+      <SeccionEnVivo videos={videosEnVivo} miembros={miembros} periodLabel={periodLabel} />
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
         <span className="text-xs font-medium text-muted-foreground">Filtrar métricas por:</span>

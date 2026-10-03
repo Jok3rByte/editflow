@@ -200,6 +200,7 @@ export interface Database {
           priority: VideoPriority;
           progreso: number;
           progreso_inicio: string | null;
+          edicion_segundos: number | null;
           strategist: string | null;
           observations: string | null;
           processed_link: string | null;
