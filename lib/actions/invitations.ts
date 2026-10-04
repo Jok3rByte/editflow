@@ -6,6 +6,7 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 import { appUrl } from "@/lib/supabase/env";
 import { GMAIL_SEND_SCOPE } from "@/lib/google/gmail";
+import { redirectTargetAfterAuth } from "@/lib/google/ensure-connected-redirect";
 import { sendInvitationEmail } from "@/lib/email/send-invitation";
 import type { InvitationStatus, MemberRole } from "@/types/database.types";
 
@@ -87,7 +88,7 @@ export async function acceptInvitation(token: string): Promise<ActionResult> {
     return { ok: false, error: error.message };
   }
 
-  redirect("/app/dashboard");
+  redirect(await redirectTargetAfterAuth(supabase, user.id));
 }
 
 /**
@@ -133,7 +134,10 @@ export async function ingresarConInvitacion(token: string, password: string): Pr
   const { error: acceptErr } = await supabase.rpc("accept_invitation", { p_token: token, p_full_name: email });
   if (acceptErr) return { ok: false, error: acceptErr.message };
 
-  redirect("/app/dashboard");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  redirect(user ? await redirectTargetAfterAuth(supabase, user.id) : "/app/dashboard");
 }
 
 export type CreateInvitationResult =

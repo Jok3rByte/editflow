@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { slugify, withRandomSuffix } from "@/lib/utils/slug";
 import { monthLabelEs } from "@/lib/utils/dates";
+import { redirectTargetAfterAuth } from "@/lib/google/ensure-connected-redirect";
 import { CREATE_ORGANIZATION_SCHEMA } from "@/lib/validations/organization";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -62,6 +63,11 @@ export async function createOrganization(formData: FormData): Promise<ActionResu
   // Conexión automática de Google: si el owner creó la cuenta con Google
   // (otorgando los permisos de Calendar/Gmail en el mismo signup), guardamos
   // su token ya ligado a su nueva membresía — sin un paso de "conectar" aparte.
+  // Si entró por link mágico (sin token de Google todavía), el redirect de
+  // abajo lo manda a /crear-espacio/conectar-google, que dispara el
+  // consentimiento solo — así cualquier cuenta nueva queda lista para
+  // mandar/recibir invitaciones y notificaciones por correo desde el
+  // primer momento, sin tener que ir a buscarlo a Configuración.
   try {
     const {
       data: { session },
@@ -101,7 +107,7 @@ export async function createOrganization(formData: FormData): Promise<ActionResu
     console.error("[createOrganization] no se pudo guardar la conexión de Google", err);
   }
 
-  redirect("/app/dashboard");
+  redirect(await redirectTargetAfterAuth(supabase, user.id));
 }
 
 export interface MyOrganization {

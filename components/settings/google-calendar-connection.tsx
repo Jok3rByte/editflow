@@ -5,11 +5,8 @@ import { toast } from "sonner";
 import { CalendarCheck2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/lib/supabase/client";
 import { disconnectGoogleCalendar } from "@/lib/actions/google-calendar";
-
-const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+import { startGoogleConnect } from "@/lib/google/start-connect";
 
 export function GoogleCalendarConnection({
   connected,
@@ -27,43 +24,9 @@ export function GoogleCalendarConnection({
 
   async function handleConectar() {
     setConnecting(true);
-    const supabase = createClient();
-
-    const oauthOptions = {
-      scopes: `${CALENDAR_SCOPE} ${GMAIL_SEND_SCOPE}`,
-      queryParams: { access_type: "offline", prompt: "consent", login_hint: accountEmail },
-      redirectTo: `${window.location.origin}/auth/callback?next=/app/configuracion&google_calendar=1`,
-    };
-
-    const { data: identidades } = await supabase.auth.getUserIdentities();
-    const todas = identidades?.identities ?? [];
-    const googleIdentity = todas.find((i) => i.provider === "google");
-    const tieneOtraIdentidad = todas.some((i) => i.provider !== "google");
-
-    let error: { message: string } | null = null;
-
-    if (googleIdentity && !tieneOtraIdentidad) {
-      // Google es la ÚNICA identidad (la cuenta se creó con Google): no se
-      // puede desvincular. Re-autenticamos con la misma cuenta para obtener
-      // tokens frescos de Calendar/Gmail; el callback los guarda.
-      ({ error } = await supabase.auth.signInWithOAuth({ provider: "google", options: oauthOptions }));
-    } else {
-      // Si Google ya está vinculado (de un intento previo) y hay otra
-      // identidad (ej. correo), lo desvinculamos primero para poder
-      // re-pedir el consentimiento; linkIdentity falla si ya está vinculado.
-      if (googleIdentity) {
-        const { error: unlinkError } = await supabase.auth.unlinkIdentity(googleIdentity);
-        if (unlinkError) {
-          toast.error("No se pudo re-conectar con Google", { description: unlinkError.message });
-          setConnecting(false);
-          return;
-        }
-      }
-      ({ error } = await supabase.auth.linkIdentity({ provider: "google", options: oauthOptions }));
-    }
-
+    const { error } = await startGoogleConnect("/app/configuracion", accountEmail);
     if (error) {
-      toast.error("No se pudo iniciar la conexión con Google", { description: error.message });
+      toast.error("No se pudo iniciar la conexión con Google", { description: error });
       setConnecting(false);
     }
     // Si no hay error, el navegador redirige a Google — no hace falta más.
