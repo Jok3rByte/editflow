@@ -4,14 +4,11 @@ import { emailFrom } from "@/lib/supabase/env";
 import { sendGmailMessage } from "@/lib/google/gmail";
 import InvitationEmail, { type InvitationEmailProps } from "@/emails/invitation";
 
-// Mismo criterio que buildFromHeader en send-event-notification: ningún
-// proveedor deja falsificar un remitente sin verificar su dominio, así que
-// por Resend se manda desde el dominio verificado de EditFlow mostrando el
-// nombre de quien invita, con reply-to a su correo real.
-function buildFromHeader(inviterName: string): string {
-  const match = emailFrom().match(/<(.+)>/);
-  const address = match?.[1] ?? "notificaciones@editflow.app";
-  return `${inviterName} vía EditFlow <${address}>`;
+// El remitente sale siempre como "EditFlow" (nunca con el nombre de quien
+// invita) — reply-to sigue yendo a su correo real para que las respuestas
+// le lleguen.
+function buildFromHeader(): string {
+  return emailFrom();
 }
 
 export interface SendInvitationInput extends InvitationEmailProps {
@@ -41,7 +38,7 @@ export async function sendInvitationEmail(input: SendInvitationInput): Promise<S
 
   if (gmailSendAvailable) {
     const sent = await sendGmailMessage(senderMembershipId, {
-      fromName: templateProps.inviterName,
+      fromName: "EditFlow",
       fromEmail: inviterEmail,
       to,
       subject,
@@ -56,7 +53,7 @@ export async function sendInvitationEmail(input: SendInvitationInput): Promise<S
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: buildFromHeader(templateProps.inviterName),
+    from: buildFromHeader(),
     to,
     replyTo: inviterEmail,
     subject,

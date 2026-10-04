@@ -7,14 +7,11 @@ import EventNotificationEmail, {
 } from "@/emails/event-notification";
 
 // Respaldo si Gmail no está disponible (cuenta conectada sin el scope
-// gmail.send, o el envío por la API de Gmail falla): ningún proveedor deja
-// falsificar un remitente sin verificar su dominio, así que acá se manda
-// desde el dominio verificado de EditFlow mostrando el nombre del
-// propietario, con reply-to a su correo real.
-function buildFromHeader(ownerName: string): string {
-  const match = emailFrom().match(/<(.+)>/);
-  const address = match?.[1] ?? "notificaciones@editflow.app";
-  return `${ownerName} vía EditFlow <${address}>`;
+// gmail.send, o el envío por la API de Gmail falla): el remitente sale
+// siempre como "EditFlow", nunca con el nombre de la persona — reply-to
+// sigue yendo a su correo real para que las respuestas le lleguen.
+function buildFromHeader(): string {
+  return emailFrom();
 }
 
 export interface SendEventNotificationInput extends EventNotificationEmailProps {
@@ -39,7 +36,7 @@ export async function sendEventNotificationEmail(input: SendEventNotificationInp
 
   if (gmailSendAvailable) {
     const sent = await sendGmailMessage(senderMembershipId, {
-      fromName: templateProps.ownerName,
+      fromName: "EditFlow",
       fromEmail: senderEmail,
       to,
       subject,
@@ -54,7 +51,7 @@ export async function sendEventNotificationEmail(input: SendEventNotificationInp
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: buildFromHeader(templateProps.ownerName),
+    from: buildFromHeader(),
     to,
     replyTo: senderEmail,
     subject,
