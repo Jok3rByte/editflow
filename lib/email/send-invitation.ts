@@ -33,7 +33,7 @@ export type SendInvitationResult =
  */
 export async function sendInvitationEmail(input: SendInvitationInput): Promise<SendInvitationResult> {
   const { to, senderMembershipId, inviterEmail, gmailSendAvailable, ...templateProps } = input;
-  const subject = `EditFlow · ${templateProps.inviterName} te invita a ${templateProps.organizationName}`;
+  const subject = `${templateProps.organizationName} te invita a colaborar`;
   const html = await render(InvitationEmail(templateProps));
 
   if (gmailSendAvailable) {
