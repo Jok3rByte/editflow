@@ -22,10 +22,12 @@ export function ClientGrid({
   summary,
   clientsById,
   canManage,
+  canDelete,
 }: {
   summary: ClientSummaryRow[];
   clientsById: Record<string, ClientFull>;
   canManage: boolean;
+  canDelete: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const editingClient = editingId ? (clientsById[editingId] ?? null) : null;
@@ -82,6 +84,7 @@ export function ClientGrid({
         client={editingClient}
         open={Boolean(editingClient)}
         onOpenChange={(o) => !o && setEditingId(null)}
+        canDelete={canDelete}
       />
     </>
   );

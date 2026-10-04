@@ -67,10 +67,12 @@ export function EditClientSheet({
   client,
   open,
   onOpenChange,
+  canDelete,
 }: {
   client: ClientFull | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canDelete: boolean;
 }) {
   const [state, formAction] = useActionState(async (_prev: ActionResult, fd: FormData) => {
     if (!client) return INITIAL_STATE;
@@ -103,7 +105,7 @@ export function EditClientSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader className="flex-row items-center justify-between gap-2 pr-10">
           <SheetTitle>Editar brief — {client?.name}</SheetTitle>
-          {client && (
+          {client && canDelete && (
             <Button
               type="button"
               variant="ghost"

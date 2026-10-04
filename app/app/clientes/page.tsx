@@ -38,10 +38,10 @@ export default async function ClientesPage() {
 
   const activeIds = new Set((activeClientIds ?? []).map((c) => c.client_id));
   const inactiveClients = (allClients ?? []).filter((c) => !activeIds.has(c.id));
-  const canManage = organization.role === "owner" || organization.role === "admin";
-  // El editor también puede crear un cliente nuevo (no activar históricos ni
-  // editar/eliminar — eso sigue siendo owner/admin).
-  const puedeAgregar = organization.role !== "viewer";
+  // Estratega (viewer) gestiona clientes y briefs igual que owner/admin,
+  // pero no puede eliminarlos (ver canDelete en EditClientSheet).
+  const canManage = organization.role === "owner" || organization.role === "admin" || organization.role === "viewer";
+  const canDelete = organization.role === "owner" || organization.role === "admin";
   const clientsById = Object.fromEntries(
     (allClients ?? []).map((c) => [c.id, c as unknown as ClientFull]),
   );
@@ -53,18 +53,16 @@ export default async function ClientesPage() {
           <h1 className="text-xl font-semibold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">{activePeriod.label}</p>
         </div>
-        {puedeAgregar && (
-          <div className="flex gap-2">
-            {canManage && (
-              <ActivateExistingClient
-                organizationId={organization.id}
-                periodId={activePeriod.id}
-                candidates={inactiveClients}
-              />
-            )}
-            <RegisterClientSheet organizationId={organization.id} periodId={activePeriod.id} />
-          </div>
-        )}
+        <div className="flex gap-2">
+          {canManage && (
+            <ActivateExistingClient
+              organizationId={organization.id}
+              periodId={activePeriod.id}
+              candidates={inactiveClients}
+            />
+          )}
+          <RegisterClientSheet organizationId={organization.id} periodId={activePeriod.id} />
+        </div>
       </div>
 
       {!summary || summary.length === 0 ? (
@@ -74,7 +72,7 @@ export default async function ClientesPage() {
           description="Registra tu primer cliente o activa uno de tu cartera histórica para empezar."
         />
       ) : (
-        <ClientGrid summary={summary} clientsById={clientsById} canManage={canManage} />
+        <ClientGrid summary={summary} clientsById={clientsById} canManage={canManage} canDelete={canDelete} />
       )}
     </div>
   );

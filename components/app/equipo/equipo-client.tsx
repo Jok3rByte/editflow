@@ -64,7 +64,7 @@ const ROL_LABEL: Record<MemberRole, string> = {
   owner: "Propietario",
   admin: "Administrador",
   editor: "Editor",
-  viewer: "Estratega · Solo lectura",
+  viewer: "Estratega",
 };
 
 function initials(name: string) {
@@ -222,7 +222,7 @@ export function EquipoClient({
                         <SelectContent>
                           <SelectItem value="admin">Administrador</SelectItem>
                           <SelectItem value="editor">Editor</SelectItem>
-                          <SelectItem value="viewer">Estratega · Solo lectura</SelectItem>
+                          <SelectItem value="viewer">Estratega</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -331,7 +331,7 @@ export function EquipoClient({
                 <SelectContent>
                   <SelectItem value="admin">Administrador — control total</SelectItem>
                   <SelectItem value="editor">Editor — edita sus propios videos</SelectItem>
-                  <SelectItem value="viewer">Estratega · Solo lectura — ve todo, gestiona clientes</SelectItem>
+                  <SelectItem value="viewer">Estratega — gestiona clientes y briefs, el resto solo lectura</SelectItem>
                 </SelectContent>
               </Select>
             </div>

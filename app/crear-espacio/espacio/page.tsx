@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "Propietario",
   admin: "Administrador",
   editor: "Editor",
-  viewer: "Solo lectura",
+  viewer: "Estratega",
 };
 
 function Shell({ children }: { children: React.ReactNode }) {
