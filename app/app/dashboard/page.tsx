@@ -38,7 +38,12 @@ const MODULOS = [
   { href: "/app/metricas", label: "Métricas", icon: LineChart, desc: "cumplimiento del mes" },
 ];
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google_error?: string }>;
+}) {
+  const { google_error: googleError } = await searchParams;
   const organization = await requireActiveOrganization();
   const puedeGestionar = organization.role === "owner" || organization.role === "admin";
   const activePeriod = await resolveActivePeriod(organization.id);
@@ -85,6 +90,20 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {googleError === "email_mismatch" && (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 p-3 text-xs text-danger">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>
+            No se conectó Google Calendar/Gmail porque elegiste una cuenta distinta al correo con el
+            que ingresas a EditFlow. Puedes intentarlo de nuevo desde{" "}
+            <Link href="/app/configuracion" className="font-medium underline underline-offset-2">
+              Configuración
+            </Link>
+            .
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{organization.name}</h1>

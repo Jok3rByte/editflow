@@ -5,30 +5,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import { ingresarConInvitacion } from "@/lib/actions/invitations";
 import { solicitarReset } from "@/lib/actions/auth";
 
 export function InviteAuthForm({ token, email }: { token: string; email: string }) {
   const [password, setPassword] = useState("");
   const [isPending, startTransition] = useTransition();
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  async function handleGoogle() {
-    setGoogleLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        queryParams: { login_hint: email },
-        redirectTo: `${window.location.origin}/auth/callback?next=/invitacion/${token}`,
-      },
-    });
-    if (error) {
-      toast.error("No se pudo iniciar con Google", { description: error.message });
-      setGoogleLoading(false);
-    }
-  }
 
   function handleEntrar(e: React.FormEvent) {
     e.preventDefault();
@@ -50,9 +33,7 @@ export function InviteAuthForm({ token, email }: { token: string; email: string 
 
   return (
     <div className="space-y-4 text-left">
-      <Button type="button" variant="outline" className="w-full" onClick={handleGoogle} disabled={googleLoading}>
-        {googleLoading ? "Redirigiendo…" : "Continuar con Google"}
-      </Button>
+      <SocialAuthButtons next={`/invitacion/${token}`} loginHint={email} />
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <div className="h-px flex-1 bg-border" />o con tu correo<div className="h-px flex-1 bg-border" />

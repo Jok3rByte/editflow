@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import {
   sendMagicLink,
   signInWithPasswordAction,
@@ -24,35 +24,6 @@ function SubmitButton({ children }: { children: React.ReactNode }) {
   return (
     <Button type="submit" className="w-full" disabled={pending}>
       {children}
-    </Button>
-  );
-}
-
-const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-
-function GoogleButton({ next, withConnect }: { next: string; withConnect?: boolean }) {
-  async function handleGoogle() {
-    const supabase = createClient();
-    // En el signup del owner (withConnect) pedimos ya los permisos de Calendar
-    // y Gmail: así la conexión queda lista en la misma pantalla, sin un paso
-    // aparte. El token se guarda al crear el espacio (createOrganization).
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        ...(withConnect
-          ? {
-              scopes: `${CALENDAR_SCOPE} ${GMAIL_SEND_SCOPE}`,
-              queryParams: { access_type: "offline", prompt: "consent" },
-            }
-          : {}),
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-  }
-  return (
-    <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
-      Continuar con Google
     </Button>
   );
 }
@@ -79,11 +50,11 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
     toast.success("Si tu correo está registrado, te enviamos un enlace para restablecer tu contraseña.");
   }
 
-  // ----- Modo ACCESO (volver a entrar): correo + contraseña o Google. -----
+  // ----- Modo ACCESO (volver a entrar): correo + contraseña o Social ID (Google/Facebook). -----
   if (modo === "acceso") {
     return (
       <div className="space-y-4">
-        <GoogleButton next={next} />
+        <SocialAuthButtons next={next} />
         <Divider />
         <form action={pwAction} className="space-y-4">
           <div className="space-y-1.5">
@@ -113,13 +84,13 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
           </button>
         </form>
         <p className="text-center text-xs text-muted-foreground">
-          Si fuiste invitado, entra con tu correo y la contraseña que creaste (o con Google).
+          Si fuiste invitado, entra con tu correo y la contraseña que creaste (o con Google o Facebook).
         </p>
       </div>
     );
   }
 
-  // ----- Modo INICIAR (crear espacio): enlace mágico + Google. -----
+  // ----- Modo INICIAR (crear espacio): enlace mágico + Social ID (Google/Facebook). -----
   if (mlState.status === "sent") {
     return (
       <div className="rounded-lg border bg-muted/40 p-6 text-center">
@@ -135,7 +106,7 @@ export function AccountForm({ next, modo }: { next: string; modo: "iniciar" | "a
 
   return (
     <div className="space-y-4">
-      <GoogleButton next={next} withConnect />
+      <SocialAuthButtons next={next} withGoogleConnect />
       <Divider />
       <form action={mlAction} className="space-y-4">
         <input type="hidden" name="next" value={next} />

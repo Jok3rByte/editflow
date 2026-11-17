@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -24,6 +25,14 @@ import { ScrollProgress } from "@/components/marketing/scroll-progress";
 import { Parallax } from "@/components/marketing/parallax";
 import { ScrollReveal } from "@/components/marketing/scroll-reveal";
 import { MiniClientes, MiniMonitoreo, MiniCalendario, MiniMetricas } from "@/components/marketing/mini-module-previews";
+import { LegalLinks } from "@/components/shared/legal-links";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, getSiteUrl } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: { absolute: SITE_TITLE },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: "/" },
+};
 
 const MODULOS = [
   {
@@ -127,11 +136,51 @@ const VITRINAS: Vitrina[] = [
 ];
 
 export default function HomePage() {
+  const siteUrl = getSiteUrl();
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: SITE_NAME,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      inLanguage: "es",
+      url: siteUrl,
+      description: SITE_DESCRIPTION,
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+      publisher: {
+        "@type": "Organization",
+        name: "Lian Films Studio",
+        url: siteUrl,
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQS.map((faq) => ({
+        "@type": "Question",
+        name: faq.pregunta,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: faq.respuesta,
+        },
+      })),
+    },
+  ];
+
   return (
     // "dark" forzado: el Home siempre se ve oscuro sin importar el tema
     // elegido en el resto de la app (esa preferencia solo aplica dentro de
     // /app y /preview).
     <div className="dark flex flex-1 flex-col bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <ScrollProgress />
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-lg">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -404,9 +453,9 @@ export default function HomePage() {
       </main>
 
       <footer className="border-t border-border/60 py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 text-sm text-muted-foreground sm:flex-row">
-          <span>© {new Date().getFullYear()} EditFlow</span>
-          <span>Hecho para productoras y creadores de contenido</span>
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 text-sm text-muted-foreground md:flex-row">
+          <span>© {new Date().getFullYear()} EditFlow · Hecho para productoras y creadores de contenido</span>
+          <LegalLinks />
         </div>
       </footer>
     </div>

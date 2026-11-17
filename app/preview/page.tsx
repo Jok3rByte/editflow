@@ -11,6 +11,14 @@ import {
   UsersRound,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata = buildPageMetadata({
+  title: "Vista previa interactiva",
+  description:
+    "Explora los módulos de EditFlow en vivo: dashboard, clientes, monitoreo en tabla y Kanban, calendario y métricas.",
+  path: "/preview",
+});
 
 const PANELES = [
   { href: "/preview/dashboard", label: "Dashboard", icon: LayoutDashboard, desc: "KPIs del mes, alertas y accesos rápidos." },

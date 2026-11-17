@@ -1,7 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
+import { LegalLinks } from "@/components/shared/legal-links";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Política de Privacidad — EditFlow" };
+export const metadata = buildPageMetadata({
+  title: "Política de Privacidad y Tratamiento de Datos",
+  description:
+    "Política de Privacidad, uso de cookies, integración de Google/Facebook y tratamiento de datos personales de EditFlow.",
+  path: "/privacidad",
+});
 
 export default function PrivacidadPage() {
   return (
@@ -12,7 +19,7 @@ export default function PrivacidadPage() {
       </Link>
 
       <h1 className="text-2xl font-semibold tracking-tight">Política de Privacidad</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Última actualización: octubre de 2026.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Última actualización: noviembre de 2026.</p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted-foreground">
         <section>
@@ -28,7 +35,10 @@ export default function PrivacidadPage() {
           <h2 className="text-base font-semibold text-foreground">2. Qué datos recopilamos</h2>
           <p className="mt-2">Al usar EditFlow guardamos:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Datos de cuenta: nombre, correo, foto de perfil (si inicias sesión con Google).</li>
+            <li>
+              Datos de cuenta: nombre, correo y foto de perfil (si inicias sesión con Google o
+              Facebook).
+            </li>
             <li>
               Datos que tú o tu equipo ingresan: clientes, briefs, videos, estados de edición,
               eventos de calendario, mensajes de invitación.
@@ -95,28 +105,81 @@ export default function PrivacidadPage() {
           <p className="mt-2">
             No vendemos ni compartimos tus datos con terceros para publicidad. Los únicos
             proveedores que procesan datos en nuestro nombre son: Supabase (base de datos y
-            autenticación), Vercel (hosting), Resend (envío de correo transaccional) y Google
-            (Calendar/Gmail, solo con tu conexión explícita).
+            autenticación), Vercel (hosting), Resend (envío de correo transaccional), Google
+            (autenticación y, con tu conexión explícita, Calendar/Gmail) y Meta/Facebook
+            (únicamente si eliges iniciar sesión con Facebook).
+          </p>
+        </section>
+
+        <section id="cookies" className="scroll-mt-20">
+          <h2 className="text-base font-semibold text-foreground">
+            6. Uso de Cookies y almacenamiento local
+          </h2>
+          <p className="mt-2">
+            EditFlow utiliza únicamente cookies esenciales y de preferencias; no empleamos cookies
+            publicitarias ni de rastreo de terceros:
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              <strong className="text-foreground">Cookies técnicas esenciales</strong>: necesarias
+              para mantener tu sesión autenticada con Supabase (correo, Google o Facebook) y
+              proteger el flujo OAuth.
+            </li>
+            <li>
+              <strong className="text-foreground">Preferencias de la aplicación</strong>: recuerdan
+              tu periodo mensual activo (<code className="text-xs">editflow_periodo</code>), el tema
+              visual elegido y tu decisión en el banner de cookies.
+            </li>
+          </ul>
+        </section>
+
+        <section id="tratamiento-datos" className="scroll-mt-20">
+          <h2 className="text-base font-semibold text-foreground">
+            7. Tratamiento de Datos Personales
+          </h2>
+          <p className="mt-2">
+            El responsable del tratamiento de los datos personales ingresados en EditFlow es Lian
+            Films Studio. Al registrarte, aceptar el aviso de cookies o usar la plataforma,
+            autorizas de manera previa, expresa e informada el tratamiento de tus datos para:
+            gestionar tu cuenta y organización, coordinar entregas de video y calendario, y enviar
+            notificaciones operativas del equipo.
+          </p>
+          <p className="mt-2">
+            Como titular de los datos puedes ejercer en cualquier momento tus derechos a conocer,
+            actualizar, rectificar y suprimir tu información, así como revocar la autorización
+            otorgada o solicitar una copia de tus datos, escribiendo a{" "}
+            <a
+              href="mailto:dev@editflow.click"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              dev@editflow.click
+            </a>
+            .
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">6. Tus controles</h2>
+          <h2 className="text-base font-semibold text-foreground">8. Tus controles</h2>
           <p className="mt-2">
             Puedes desconectar tu cuenta de Google en cualquier momento desde
-            Configuración → Google Calendar + Gmail → Desconectar. Esto revoca el acceso y borra el
+            Configuración → Integración de Google → Desconectar. Esto revoca el acceso y borra el
             token guardado. Puedes pedir la eliminación completa de tu cuenta y tus datos
-            escribiendo a <a href="mailto:lianproductor@gmail.com" className="text-primary underline-offset-2 hover:underline">lianproductor@gmail.com</a>.
+            escribiendo a <a href="mailto:dev@editflow.click" className="text-primary underline-offset-2 hover:underline">dev@editflow.click</a>.
           </p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">7. Contacto</h2>
+          <h2 className="text-base font-semibold text-foreground">9. Contacto</h2>
           <p className="mt-2">
-            Preguntas sobre esta política: <a href="mailto:lianproductor@gmail.com" className="text-primary underline-offset-2 hover:underline">lianproductor@gmail.com</a>.
+            Preguntas sobre esta política o sobre tratamiento de datos:{" "}
+            <a href="mailto:dev@editflow.click" className="text-primary underline-offset-2 hover:underline">dev@editflow.click</a>.
           </p>
         </section>
       </div>
+
+      <footer className="mt-12 border-t border-border/60 pt-6">
+        <LegalLinks />
+      </footer>
     </div>
   );
 }

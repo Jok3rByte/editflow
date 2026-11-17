@@ -23,7 +23,7 @@ export default async function CalendarioPage() {
       .eq("organization_id", org.id)
       .eq("active", true)
       .order("full_name"),
-    supabase.from("google_oauth_tokens").select("google_email").eq("organization_id", org.id).maybeSingle(),
+    supabase.from("google_oauth_tokens").select("google_email").eq("membership_id", org.membershipId).maybeSingle(),
   ]);
 
   const puedeEditar = org.role === "owner" || org.role === "admin";

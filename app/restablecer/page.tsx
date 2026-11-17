@@ -1,6 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
+import { NOINDEX_ROBOTS } from "@/lib/seo";
+
+export const metadata = {
+  title: "Restablecer contraseña",
+  robots: NOINDEX_ROBOTS,
+};
 
 export default function RestablecerPage() {
   return (

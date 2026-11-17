@@ -15,7 +15,12 @@ export async function startGoogleConnect(
   nextPath: string,
   accountEmail?: string,
 ): Promise<{ error?: string }> {
-  const supabase = createClient();
+  let supabase;
+  try {
+    supabase = createClient();
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "No se pudo inicializar Supabase." };
+  }
 
   const oauthOptions = {
     scopes: `${CALENDAR_SCOPE} ${GMAIL_SEND_SCOPE}`,
@@ -27,10 +32,14 @@ export async function startGoogleConnect(
     redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}&google_calendar=1`,
   };
 
-  const { data: identidades } = await supabase.auth.getUserIdentities();
+  const { data: identidades, error: idError } = await supabase.auth.getUserIdentities();
+  if (idError) {
+    return { error: idError.message };
+  }
+
   const todas = identidades?.identities ?? [];
-  const googleIdentity = todas.find((i) => i.provider === "google");
-  const tieneOtraIdentidad = todas.some((i) => i.provider !== "google");
+  const googleIdentity = todas.find((i: { provider: string; }) => i.provider === "google");
+  const tieneOtraIdentidad = todas.some((i: { provider: string; }) => i.provider !== "google");
 
   let error: { message: string } | null = null;
 

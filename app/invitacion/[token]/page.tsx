@@ -5,6 +5,12 @@ import { getInvitationByToken } from "@/lib/actions/invitations";
 import { InviteAuthForm } from "@/components/auth/invite-auth-form";
 import { AcceptInvitationButton } from "@/components/auth/accept-invitation-button";
 import { Badge } from "@/components/ui/badge";
+import { NOINDEX_ROBOTS } from "@/lib/seo";
+
+export const metadata = {
+  title: "Invitación al equipo",
+  robots: NOINDEX_ROBOTS,
+};
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Propietario",
@@ -57,12 +63,12 @@ export default async function InvitacionPage({
 
             <div className="mt-8 text-left">
               {user ? (
-                user.email === invitation.email ? (
+                user.email?.toLowerCase() === invitation.email.toLowerCase() ? (
                   <AcceptInvitationButton token={token} />
                 ) : (
                   <p className="text-center text-sm text-danger">
                     Esta invitación es para {invitation.email}, pero iniciaste sesión con{" "}
-                    {user.email}.
+                    {user.email ?? "una cuenta sin correo"}.
                   </p>
                 )
               ) : (

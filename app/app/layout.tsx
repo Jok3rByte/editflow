@@ -9,6 +9,12 @@ import { OpenCurrentMonthBanner } from "@/components/period/open-current-month-b
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { NOINDEX_ROBOTS } from "@/lib/seo";
+
+export const metadata = {
+  title: "Espacio de trabajo",
+  robots: NOINDEX_ROBOTS,
+};
 
 // Todo lo que cuelga de /app depende de datos que mutan por acción del
 // usuario (videos, periodos, clientes...) — nunca debe quedar estático ni

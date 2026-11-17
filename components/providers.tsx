@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { CookieBanner } from "@/components/shared/cookie-banner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           {children}
+          <CookieBanner />
           <Toaster richColors position="top-right" />
         </TooltipProvider>
       </QueryClientProvider>

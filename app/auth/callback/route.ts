@@ -8,7 +8,10 @@ const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/crear-espacio/espacio";
+  const rawNext = searchParams.get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+    ? rawNext
+    : "/crear-espacio/espacio";
   const linkingGoogleCalendar = searchParams.get("google_calendar") === "1";
   // Cuando Google/Supabase rechazan el intento ANTES de emitir un code
   // (ej. el correo de Google ya está registrado con otro proveedor), el

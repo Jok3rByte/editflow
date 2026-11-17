@@ -10,7 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 
 export function ResetPasswordForm() {
   const router = useRouter();
-  const [supabase] = useState(() => createClient());
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -24,12 +23,12 @@ export function ResetPasswordForm() {
     const access_token = p.get("access_token");
     const refresh_token = p.get("refresh_token");
     if (access_token && refresh_token) {
-      supabase.auth
-        .setSession({ access_token, refresh_token })
+      createClient()
+        .auth.setSession({ access_token, refresh_token })
         .catch(() => {})
         .finally(() => window.history.replaceState(null, "", window.location.pathname));
     }
-  }, [supabase]);
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,15 +41,21 @@ export function ResetPasswordForm() {
       return;
     }
     startTransition(async () => {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        toast.error("No se pudo cambiar la contraseña", {
-          description: "Puede que el enlace haya expirado. Solicita uno nuevo.",
+      try {
+        const { error } = await createClient().auth.updateUser({ password });
+        if (error) {
+          toast.error("No se pudo cambiar la contraseña", {
+            description: "Puede que el enlace haya expirado. Solicita uno nuevo.",
+          });
+          return;
+        }
+        toast.success("Contraseña actualizada");
+        router.push("/app/dashboard");
+      } catch (err) {
+        toast.error("Falta configurar Supabase en .env.local", {
+          description: err instanceof Error ? err.message : undefined,
         });
-        return;
       }
-      toast.success("Contraseña actualizada");
-      router.push("/app/dashboard");
     });
   }
 

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
+import { LegalLinks } from "@/components/shared/legal-links";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Términos de Servicio — EditFlow" };
+export const metadata = buildPageMetadata({
+  title: "Condiciones del Servicio",
+  description:
+    "Condiciones del Servicio, uso de cuentas, roles e integraciones de Google y Facebook en EditFlow.",
+  path: "/terminos",
+});
 
 export default function TerminosPage() {
   return (
@@ -11,8 +18,8 @@ export default function TerminosPage() {
         EditFlow
       </Link>
 
-      <h1 className="text-2xl font-semibold tracking-tight">Términos de Servicio</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Última actualización: octubre de 2026.</p>
+      <h1 className="text-2xl font-semibold tracking-tight">Condiciones del Servicio</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Última actualización: noviembre de 2026.</p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed text-muted-foreground">
         <section>
@@ -42,11 +49,14 @@ export default function TerminosPage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground">4. Conexión con Google</h2>
+          <h2 className="text-base font-semibold text-foreground">4. Conexión con Google y Facebook</h2>
           <p className="mt-2">
-            Conectar tu cuenta de Google (Calendar y Gmail) es opcional y puedes desconectarla
-            cuando quieras desde Configuración. El detalle de qué hacemos con esos permisos está en
-            la <Link href="/privacidad" className="text-primary underline-offset-2 hover:underline">Política de Privacidad</Link>.
+            Puedes iniciar sesión con correo, Google o Facebook. Conectar tu cuenta de Google
+            (Calendar y Gmail) es opcional y puedes desconectarla cuando quieras desde
+            Configuración. El detalle de qué hacemos con esos datos y permisos está en la{" "}
+            <Link href="/privacidad" className="text-primary underline-offset-2 hover:underline">Política de Privacidad</Link>{" "}
+            y en el{" "}
+            <Link href="/privacidad#tratamiento-datos" className="text-primary underline-offset-2 hover:underline">Tratamiento de Datos Personales</Link>.
           </p>
         </section>
 
@@ -78,10 +88,14 @@ export default function TerminosPage() {
         <section>
           <h2 className="text-base font-semibold text-foreground">8. Contacto</h2>
           <p className="mt-2">
-            <a href="mailto:lianproductor@gmail.com" className="text-primary underline-offset-2 hover:underline">lianproductor@gmail.com</a>.
+            <a href="mailto:dev@editflow.click" className="text-primary underline-offset-2 hover:underline">dev@editflow.click</a>.
           </p>
         </section>
       </div>
+
+      <footer className="mt-12 border-t border-border/60 pt-6">
+        <LegalLinks />
+      </footer>
     </div>
   );
 }

@@ -1,6 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { AccountForm } from "@/components/auth/account-form";
+import { LegalLinks } from "@/components/shared/legal-links";
+import { NOINDEX_ROBOTS } from "@/lib/seo";
+
+export const metadata = {
+  title: "Iniciar sesión o crear espacio",
+  robots: NOINDEX_ROBOTS,
+};
 
 export default async function CrearEspacioPage({
   searchParams,
@@ -39,6 +46,10 @@ export default async function CrearEspacioPage({
           </div>
         )}
       </div>
+
+      <footer className="mt-12">
+        <LegalLinks />
+      </footer>
     </div>
   );
 }

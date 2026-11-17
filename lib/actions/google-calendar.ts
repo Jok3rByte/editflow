@@ -4,19 +4,15 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireActiveOrganization } from "@/lib/period/resolve";
 
-// Solo owner/admin gestiona la integración de Google. La policy RLS además
-// limita el delete a la fila del propio usuario.
+// Cada miembro gestiona su propia conexión de Google (migración 0012 / RLS).
 export async function disconnectGoogleCalendar() {
   const org = await requireActiveOrganization();
-  if (org.role !== "owner" && org.role !== "admin") {
-    throw new Error("Solo el administrador puede gestionar la integración de Google.");
-  }
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("google_oauth_tokens")
     .delete()
-    .eq("organization_id", org.id);
+    .eq("membership_id", org.membershipId);
 
   if (error) throw new Error(error.message);
 
